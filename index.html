@@ -10,6 +10,19 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Hebrew:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0d0f14;--surface:#161922;--border:#252a35;--text:#e2e8f0;--muted:#6b7585;--accent:#4ade80;--warn:#f59e0b;--danger:#f87171;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+.overlay.hidden{display:none;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px 36px;max-width:480px;width:90%;text-align:center;direction:rtl;}
+.modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
+.modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
+.modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
+.modal input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:.9rem;border-radius:4px;outline:none;margin-top:16px;text-align:center;}
+.modal input[type=password]:focus{border-color:var(--accent);}
+.modal .err{color:var(--danger);font-size:.75rem;font-family:'IBM Plex Mono',monospace;margin-top:8px;min-height:18px;}
+.modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
+.modal button:hover{opacity:.85;}
+.modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;min-height:100vh;display:flex;flex-direction:column;}
 header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
@@ -78,8 +91,78 @@ canvas{width:100%!important;height:100%!important;}
 </style>
 </head>
 <body>
+
+<!-- Mobile warning -->
+<div class="overlay" id="mobileOverlay">
+  <div class="modal">
+    <h2>⚠ שים לב</h2>
+    <p>האתר לא מותאם לשימוש במכשירים ניידים.</p>
+    <p>לחוויה מיטבית, יש לגשת מדפדפן שולחני.</p>
+    <button onclick="document.getElementById('mobileOverlay').classList.add('hidden')">המשך בכל זאת</button>
+  </div>
+</div>
+
+<!-- Disclaimer -->
+<div class="overlay hidden" id="disclaimerOverlay">
+  <div class="modal">
+    <h2>CBS // Price Index Explorer</h2>
+    <p>אין להסתמך על הנתונים המופיעים באתר זה לצורך ביצוע עסקאות ו/או פעולות.</p>
+    <p>מטרת הנתונים היא להוות כלי עזר בלבד בצירוף עם נתונים או חישובים אחרים.</p>
+    <p>אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם או ייגרם כתוצאה מהסתמכות על הנתונים.</p>
+    <hr class="divider">
+    <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
+    <button onclick="showPassword()">הבנתי, המשך</button>
+  </div>
+</div>
+
+<!-- Password -->
+<div class="overlay hidden" id="passwordOverlay">
+  <div class="modal">
+    <h2>// גישה מוגבלת</h2>
+    <p>הזן סיסמה להמשך</p>
+    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="err" id="pwErr"></div>
+    <button onclick="checkPassword()">כניסה</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+  if(isMobile){
+    document.getElementById('mobileOverlay').classList.remove('hidden');
+    document.getElementById('mobileOverlay').addEventListener('click', function(e){
+      if(e.target===this) this.classList.add('hidden');
+    });
+    // after closing mobile warning, show disclaimer
+    document.querySelector('#mobileOverlay button').addEventListener('click', function(){
+      document.getElementById('disclaimerOverlay').classList.remove('hidden');
+    });
+  } else {
+    document.getElementById('disclaimerOverlay').classList.remove('hidden');
+  }
+})();
+function showPassword(){
+  document.getElementById('disclaimerOverlay').classList.add('hidden');
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('pwInput').focus(),100);
+}
+function checkPassword(){
+  const val = document.getElementById('pwInput').value;
+  if(val === 'Lamas'){
+    document.getElementById('passwordOverlay').classList.add('hidden');
+  } else {
+    const err = document.getElementById('pwErr');
+    err.textContent = 'סיסמה שגויה';
+    document.getElementById('pwInput').value='';
+    setTimeout(()=>err.textContent='', 2000);
+  }
+}
+</script>
+
 <header>
   <h1>CBS // Price Index Explorer</h1>
+  <span class="beta-badge">BETA</span>
   <p>הלשכה המרכזית לסטטיסטיקה · 1254 מדדים · Generated: 2026-05-27 13:00</p>
 </header>
 
