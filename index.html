@@ -232,6 +232,13 @@ let filtered    = [];
 
 // ── Catalog rendering ─────────────────────────────────────────────────────────
 function filterCatalog() {
+  // Freeze chart dimensions during catalog re-render
+  const chartWrap = document.querySelector('.chart-wrap');
+  if (chart) {
+    chartWrap.style.width = chartWrap.offsetWidth + 'px';
+    chartWrap.style.height = chartWrap.offsetHeight + 'px';
+  }
+
   const q = document.getElementById("searchBox").value.trim().toLowerCase();
   filtered = q
     ? CATALOG.filter(r =>
@@ -244,7 +251,6 @@ function filterCatalog() {
   const info = document.getElementById("searchInfo");
   info.textContent = `${filtered.length.toLocaleString()} מדדים מוצגים`;
 
-  // Virtualise: only render first 200 for perf
   const slice = filtered.slice(0, 200);
   list.innerHTML = slice.map(r => {
     const sel = selectedMap[r.code] ? "selected" : "";
@@ -258,6 +264,14 @@ function filterCatalog() {
 
   if (filtered.length > 200)
     list.innerHTML += `<div style="padding:10px 14px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;">... ועוד ${filtered.length - 200} תוצאות — צמצם את החיפוש</div>`;
+
+  // Release after render
+  if (chart) {
+    requestAnimationFrame(() => {
+      chartWrap.style.width = '';
+      chartWrap.style.height = '';
+    });
+  }
 }
 
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
