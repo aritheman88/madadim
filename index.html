@@ -413,8 +413,8 @@ async function fetchSelected() {
 
   const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_'));
 
-  if (!cbsCodes.length && !codes.some(c => c.startsWith('BOI_'))) {
-    // All selected series are pre-loaded World Bank data
+  if (!cbsCodes.length) {
+    // All selected series are pre-loaded (World Bank / BOI)
     setStatus("ok", `נטענו ${codes.length} מדדים`);
     document.getElementById("xlsxBtn").disabled = false;
     updateChart();
@@ -430,14 +430,10 @@ async function fetchSelected() {
 
   let done = 0;
   for (const code of codes) {
-    if (code.startsWith('WB_')) { done++; continue; }
+    if (code.startsWith('WB_') || code.startsWith('BOI_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
-      if (code.startsWith('BOI_')) {
-        selectedMap[code].data = await fetchBoi(code);
-      } else {
-        selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
-      }
+      selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
       done++;
     } catch(e) {
       setStatus("error", `שגיאה בטעינת ${code}: ${e.message}`);
@@ -613,47 +609,10 @@ function downloadXlsx() {
 }
 
 // ── Bank of Israel exchange rates ─────────────────────────────────────────────
-const BOI_BASE = "https://edge.boi.org.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0";
-
 const BOI_SERIES = [
-  { code: "BOI_USD_ILS", name: "USD / NIS", seriesId: "RER_USD_ILS", from: "1995-01" },
-  { code: "BOI_EUR_ILS", name: "EUR / NIS", seriesId: "RER_EUR_ILS", from: "1999-01" },
+  { code: "BOI_USD_ILS", name: "USD / NIS", from: "1948-05" },
+  { code: "BOI_EUR_ILS", name: "EUR / NIS", from: "1999-01" },
 ];
-
-async function fetchBoi(code) {
-  const meta = BOI_SERIES.find(s => s.code === code);
-  if (!meta) throw new Error(`Unknown BOI series: ${code}`);
-  const url = `${BOI_BASE}/${meta.seriesId}?format=csv&normalisefreq=M;mean`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`BOI API HTTP ${res.status}`);
-  const text = await res.text();
-  const lines = text.trim().split("\n");
-  if (lines.length < 2) throw new Error("BOI API returned no data");
-
-  // Parse CSV header to find TIME_PERIOD and OBS_VALUE columns
-  const headers = lines[0].split(",");
-  const tIdx = headers.indexOf("TIME_PERIOD");
-  const vIdx = headers.indexOf("OBS_VALUE");
-  if (tIdx < 0 || vIdx < 0) throw new Error("BOI CSV missing expected columns");
-
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const date = cols[tIdx]?.trim();
-    const val  = parseFloat(cols[vIdx]);
-    if (date && !isNaN(val) && val > 0) rows.push({ date, value: val, pct_year: null });
-  }
-  rows.sort((a, b) => a.date.localeCompare(b.date));
-
-  // Compute YoY %
-  const byDate = Object.fromEntries(rows.map(r => [r.date, r.value]));
-  for (const r of rows) {
-    const [yr, mo] = r.date.split("-");
-    const prev = byDate[`${+yr - 1}-${mo}`];
-    if (prev) r.pct_year = +((r.value / prev - 1) * 100).toFixed(2);
-  }
-  return rows;
-}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function loadPinkSheet() {
@@ -688,8 +647,22 @@ BOI_SERIES.forEach(s => CATALOG.push({
   source:  "boi",
 }));
 
+async function loadBoiRates() {
+  try {
+    const res = await fetch('boi_rates.json');
+    if (!res.ok) return;
+    const boi = await res.json();
+    boi.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    filterCatalog();
+    console.log(`[BOI] ${boi.series.length} exchange rate series loaded (updated ${boi.updated})`);
+  } catch(e) {
+    console.warn('[BOI] Not available:', e.message);
+  }
+}
+
 filterCatalog();
 loadPinkSheet();
+loadBoiRates();
 </script>
 </body>
 </html>
