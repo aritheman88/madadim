@@ -257,9 +257,13 @@ function filterCatalog() {
     const sel = selectedMap[r.code] ? "selected" : "";
     const color = selectedMap[r.code]?.color ?? "";
     const border = color ? `border-right:3px solid ${color};` : "";
-    const wbBadge = r.source === 'wb' ? `<span style="background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">WB</span>` : '';
+    const srcBadge = r.source === 'wb'
+      ? `<span style="background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">WB</span>`
+      : r.source === 'boi'
+      ? `<span style="background:#2d1b4e;border:1px solid #a855f7;color:#c084fc;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">BOI</span>`
+      : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
-      <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${wbBadge}</div>
+      <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
       <div class="item-meta"><span class="item-code">${r.code}</span> · ${esc(r.subject).slice(0,50)}</div>
     </div>`;
   }).join("");
@@ -407,9 +411,9 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-  const cbsCodes = codes.filter(c => !c.startsWith('WB_'));
+  const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_'));
 
-  if (!cbsCodes.length) {
+  if (!cbsCodes.length && !codes.some(c => c.startsWith('BOI_'))) {
     // All selected series are pre-loaded World Bank data
     setStatus("ok", `נטענו ${codes.length} מדדים`);
     document.getElementById("xlsxBtn").disabled = false;
@@ -422,14 +426,18 @@ async function fetchSelected() {
   const btn    = document.getElementById("fetchBtn");
   btn.disabled = true;
 
-  setStatus("loading", `טוען ${cbsCodes.length} מדדים...`);
+  setStatus("loading", `טוען ${codes.length} מדדים...`);
 
   let done = 0;
   for (const code of codes) {
     if (code.startsWith('WB_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
-      selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
+      if (code.startsWith('BOI_')) {
+        selectedMap[code].data = await fetchBoi(code);
+      } else {
+        selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
+      }
       done++;
     } catch(e) {
       setStatus("error", `שגיאה בטעינת ${code}: ${e.message}`);
@@ -604,6 +612,49 @@ function downloadXlsx() {
   XLSX.writeFile(wb, fname);
 }
 
+// ── Bank of Israel exchange rates ─────────────────────────────────────────────
+const BOI_BASE = "https://edge.boi.org.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0";
+
+const BOI_SERIES = [
+  { code: "BOI_USD_ILS", name: "USD / NIS", seriesId: "RER_USD_ILS", from: "1995-01" },
+  { code: "BOI_EUR_ILS", name: "EUR / NIS", seriesId: "RER_EUR_ILS", from: "1999-01" },
+];
+
+async function fetchBoi(code) {
+  const meta = BOI_SERIES.find(s => s.code === code);
+  if (!meta) throw new Error(`Unknown BOI series: ${code}`);
+  const url = `${BOI_BASE}/${meta.seriesId}?format=csv&normalisefreq=M;mean`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`BOI API HTTP ${res.status}`);
+  const text = await res.text();
+  const lines = text.trim().split("\n");
+  if (lines.length < 2) throw new Error("BOI API returned no data");
+
+  // Parse CSV header to find TIME_PERIOD and OBS_VALUE columns
+  const headers = lines[0].split(",");
+  const tIdx = headers.indexOf("TIME_PERIOD");
+  const vIdx = headers.indexOf("OBS_VALUE");
+  if (tIdx < 0 || vIdx < 0) throw new Error("BOI CSV missing expected columns");
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const date = cols[tIdx]?.trim();
+    const val  = parseFloat(cols[vIdx]);
+    if (date && !isNaN(val) && val > 0) rows.push({ date, value: val, pct_year: null });
+  }
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+
+  // Compute YoY %
+  const byDate = Object.fromEntries(rows.map(r => [r.date, r.value]));
+  for (const r of rows) {
+    const [yr, mo] = r.date.split("-");
+    const prev = byDate[`${+yr - 1}-${mo}`];
+    if (prev) r.pct_year = +((r.value / prev - 1) * 100).toFixed(2);
+  }
+  return rows;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function loadPinkSheet() {
   try {
@@ -626,6 +677,16 @@ async function loadPinkSheet() {
     console.warn('[Pink Sheet] Not available:', e.message);
   }
 }
+
+// Inject BOI exchange rate entries into catalog
+BOI_SERIES.forEach(s => CATALOG.push({
+  code:    s.code,
+  name:    s.name,
+  from:    s.from,
+  to:      new Date().toISOString().slice(0, 7),
+  subject: "Exchange Rates · ₪",
+  source:  "boi",
+}));
 
 filterCatalog();
 loadPinkSheet();
