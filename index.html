@@ -171,7 +171,7 @@ function checkPassword(){
   <!-- Left: catalog search -->
   <div class="sidebar">
     <div class="search-wrap">
-      <input type="text" id="searchBox" placeholder="חיפוש לפי שם, קוד או נושא..." oninput="filterCatalog()" dir="rtl" autofocus>
+      <input type="text" id="searchBox" placeholder="עברית — CBS  /  English — World Bank" oninput="filterCatalog()" dir="rtl" autofocus>
       <div class="search-info" id="searchInfo"></div>
     </div>
     <div class="catalog-list" id="catalogList"></div>
@@ -225,6 +225,7 @@ const COLORS = [
   "#22d3ee","#c084fc","#86efac","#fca5a5","#93c5fd",
 ];
 let selectedMap = {};   // code -> {name, color, data: null}
+let WB_DATA     = {};   // WB series code -> pre-loaded data array
 let colorIdx    = 0;
 let mode        = "base";
 let chart       = null;
@@ -256,8 +257,9 @@ function filterCatalog() {
     const sel = selectedMap[r.code] ? "selected" : "";
     const color = selectedMap[r.code]?.color ?? "";
     const border = color ? `border-right:3px solid ${color};` : "";
+    const wbBadge = r.source === 'wb' ? `<span style="background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">WB</span>` : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
-      <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}</div>
+      <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${wbBadge}</div>
       <div class="item-meta"><span class="item-code">${r.code}</span> · ${esc(r.subject).slice(0,50)}</div>
     </div>`;
   }).join("");
@@ -290,7 +292,8 @@ function toggleIndex(code, name) {
       setStatus("", "מקסימום 10 מדדים בו-זמנית");
       return;
     }
-    selectedMap[code] = { name, color: COLORS[colorIdx % COLORS.length], data: null };
+    const preloaded = WB_DATA[code] || null;
+    selectedMap[code] = { name, color: COLORS[colorIdx % COLORS.length], data: preloaded };
     colorIdx++;
   }
   renderChips();
@@ -401,18 +404,29 @@ async function fetchIndex(code, fromYm, toYm) {
 }
 
 async function fetchSelected() {
-  const codes = Object.keys(selectedMap);
+  const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
+
+  const cbsCodes = codes.filter(c => !c.startsWith('WB_'));
+
+  if (!cbsCodes.length) {
+    // All selected series are pre-loaded World Bank data
+    setStatus("ok", `נטענו ${codes.length} מדדים`);
+    document.getElementById("xlsxBtn").disabled = false;
+    updateChart();
+    return;
+  }
 
   const fromYm = document.getElementById("fromDate").value;
   const toYm   = document.getElementById("toDate").value;
   const btn    = document.getElementById("fetchBtn");
   btn.disabled = true;
 
-  setStatus("loading", `טוען ${codes.length} מדדים...`);
+  setStatus("loading", `טוען ${cbsCodes.length} מדדים...`);
 
   let done = 0;
   for (const code of codes) {
+    if (code.startsWith('WB_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
@@ -591,7 +605,30 @@ function downloadXlsx() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+async function loadPinkSheet() {
+  try {
+    const res = await fetch('pink_sheet.json');
+    if (!res.ok) return;
+    const ps = await res.json();
+    ps.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const wbEntries = ps.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'wb',
+    }));
+    CATALOG.push(...wbEntries);
+    filterCatalog();
+    console.log(`[Pink Sheet] ${ps.series.length} series loaded (updated ${ps.updated})`);
+  } catch(e) {
+    console.warn('[Pink Sheet] Not available:', e.message);
+  }
+}
+
 filterCatalog();
+loadPinkSheet();
 </script>
 </body>
 </html>
