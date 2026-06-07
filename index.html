@@ -359,18 +359,20 @@ async function fetchIndex(code, fromYm, toYm) {
     const from_s = cursor.toISOString().slice(0,7);
     const to_s   = chunkEnd.toISOString().slice(0,7);
 
-    // NO baseType=1 — get raw values, each chunk on whatever base the API uses
-    const url = `${API}?id=${code}&startPeriod=${cbsPeriod(from_s)}&endPeriod=${cbsPeriod(to_s)}&format=xml&lang=he`;
+    // Keep baseType=1 — XML structure stays the same
+    const url = `${API}?id=${code}&startPeriod=${cbsPeriod(from_s)}&endPeriod=${cbsPeriod(to_s)}&format=xml&lang=he&baseType=1`;
     const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${code}`);
     const text = await res.text();
     const xml = new DOMParser().parseFromString(text, "application/xml");
+    if (xml.querySelector("parsererror")) throw new Error("XML parse error");
 
     const rows = [];
     xml.querySelectorAll("DateMonth").forEach(dm => {
       const year  = dm.querySelector("year")?.textContent?.trim();
       const month = dm.querySelector("month")?.textContent?.trim().padStart(2,"0");
-      const val   = parseFloat(dm.querySelector("value")?.textContent);
+      const base  = dm.querySelector("currBase");
+      const val   = parseFloat(base?.querySelector("value")?.textContent);
       const pct   = parseFloat(dm.querySelector("percentYear")?.textContent);
       if (year && month && !isNaN(val))
         rows.push({ date:`${year}-${month}`, value:val, pct_year:isNaN(pct)?null:pct });
@@ -378,26 +380,33 @@ async function fetchIndex(code, fromYm, toYm) {
     rows.sort((a,b) => a.date.localeCompare(b.date));
     allChunks.push(rows);
 
-    cursor.setMonth(cursor.getMonth() + 60);
+    // Advance by 59 months so the next chunk starts 1 month before this one ends
+    // giving us an overlap point to compute the scale factor
+    cursor.setMonth(cursor.getMonth() + 59);
   }
 
   if (!allChunks.length) return [];
 
-  // Chain chunks: scale each chunk so it joins seamlessly to the previous
+  // Chain chunks using the overlap: last date of chunk[i] == first date of chunk[i+1]
   let result = [...allChunks[0]];
   for (let i = 1; i < allChunks.length; i++) {
     const chunk = allChunks[i];
     if (!chunk.length) continue;
-    // Find the last value from previous result
-    const prevLast = result[result.length - 1];
-    // Find first value in new chunk
-    const chunkFirst = chunk[0];
-    // Compute scale factor
-    const scale = prevLast.value / chunkFirst.value;
-    // Apply scale to all rows in this chunk and append (skip first if duplicate date)
-    for (const r of chunk) {
-      if (!result.find(x => x.date === r.date)) {
-        result.push({ date: r.date, value: r.value * scale, pct_year: r.pct_year });
+    // The overlap date: first date of this chunk should exist in result
+    const overlapDate = chunk[0].date;
+    const prevVal = result.find(x => x.date === overlapDate)?.value;
+    const newVal  = chunk[0].value;
+    if (prevVal == null || newVal === 0) {
+      // No overlap found, just append without scaling
+      for (const r of chunk) {
+        if (!result.find(x => x.date === r.date))
+          result.push(r);
+      }
+    } else {
+      const scale = prevVal / newVal;
+      for (const r of chunk) {
+        if (!result.find(x => x.date === r.date))
+          result.push({ date: r.date, value: r.value * scale, pct_year: r.pct_year });
       }
     }
   }
