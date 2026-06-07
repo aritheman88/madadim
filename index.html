@@ -347,10 +347,9 @@ function cbsPeriod(ym) {
 }
 
 async function fetchIndex(code, fromYm, toYm) {
-  // Fetch in 60-month chunks
-  const chunks = [];
+  const allChunks = [];
   let cursor = new Date(fromYm + "-01");
-  const end   = new Date(toYm  + "-01");
+  const end = new Date(toYm + "-01");
 
   while (cursor <= end) {
     const chunkEnd = new Date(cursor);
@@ -360,36 +359,51 @@ async function fetchIndex(code, fromYm, toYm) {
     const from_s = cursor.toISOString().slice(0,7);
     const to_s   = chunkEnd.toISOString().slice(0,7);
 
-    const url = `${API}?id=${code}&startPeriod=${cbsPeriod(from_s)}&endPeriod=${cbsPeriod(to_s)}&format=xml&lang=he&baseType=1`;
+    // NO baseType=1 — get raw values, each chunk on whatever base the API uses
+    const url = `${API}?id=${code}&startPeriod=${cbsPeriod(from_s)}&endPeriod=${cbsPeriod(to_s)}&format=xml&lang=he`;
     const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${code}`);
     const text = await res.text();
-    const xml  = new DOMParser().parseFromString(text, "application/xml");
-    if (xml.querySelector("parsererror")) throw new Error("XML parse error");
+    const xml = new DOMParser().parseFromString(text, "application/xml");
 
+    const rows = [];
     xml.querySelectorAll("DateMonth").forEach(dm => {
       const year  = dm.querySelector("year")?.textContent?.trim();
       const month = dm.querySelector("month")?.textContent?.trim().padStart(2,"0");
-      const base  = dm.querySelector("currBase");
-      const val   = parseFloat(base?.querySelector("value")?.textContent);
+      const val   = parseFloat(dm.querySelector("value")?.textContent);
       const pct   = parseFloat(dm.querySelector("percentYear")?.textContent);
       if (year && month && !isNaN(val))
-        chunks.push({ date:`${year}-${month}`, value:val, pct_year:isNaN(pct)?null:pct });
+        rows.push({ date:`${year}-${month}`, value:val, pct_year:isNaN(pct)?null:pct });
     });
+    rows.sort((a,b) => a.date.localeCompare(b.date));
+    allChunks.push(rows);
 
     cursor.setMonth(cursor.getMonth() + 60);
   }
 
-  // Deduplicate and sort
-  const seen = new Set(), rows = [];
-  chunks.sort((a,b) => a.date.localeCompare(b.date));
-  for (const r of chunks) {
-    if (!seen.has(r.date)) { seen.add(r.date); rows.push(r); }
+  if (!allChunks.length) return [];
+
+  // Chain chunks: scale each chunk so it joins seamlessly to the previous
+  let result = [...allChunks[0]];
+  for (let i = 1; i < allChunks.length; i++) {
+    const chunk = allChunks[i];
+    if (!chunk.length) continue;
+    // Find the last value from previous result
+    const prevLast = result[result.length - 1];
+    // Find first value in new chunk
+    const chunkFirst = chunk[0];
+    // Compute scale factor
+    const scale = prevLast.value / chunkFirst.value;
+    // Apply scale to all rows in this chunk and append (skip first if duplicate date)
+    for (const r of chunk) {
+      if (!result.find(x => x.date === r.date)) {
+        result.push({ date: r.date, value: r.value * scale, pct_year: r.pct_year });
+      }
+    }
   }
 
-
-
-  return rows;
+  result.sort((a,b) => a.date.localeCompare(b.date));
+  return result;
 }
 
 async function fetchSelected() {
