@@ -408,33 +408,6 @@ async function fetchIndex(code, fromYm, toYm) {
 }
 
 
-  // Deduplicate and sort
-  const seen = new Set(), rows = [];
-  chunks.sort((a,b) => a.date.localeCompare(b.date));
-  for (const r of chunks) {
-    if (!seen.has(r.date)) { seen.add(r.date); rows.push(r); }
-  }
-
-  // Chain rebase boundaries (January drops > 1 point)
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].date.endsWith("-01")) {
-      const drop = rows[i-1].value - rows[i].value;
-      if (drop > 1.0) {
-        const scale = rows[i-1].value / rows[i].value;
-        for (let j = i; j < rows.length; j++) rows[j].value *= scale;
-      }
-    }
-  }
-
-  // Rescale to base 2010=100
-  const v2010 = rows.filter(r => r.date.startsWith("2010")).map(r => r.value);
-  if (v2010.length) {
-    const avg = v2010.reduce((a,b) => a+b, 0) / v2010.length;
-    rows.forEach(r => r.value = Math.round(r.value / avg * 1000) / 10);
-  }
-
-  return rows;
-}
 
 async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
