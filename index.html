@@ -610,34 +610,19 @@ function downloadXlsx() {
   XLSX.writeFile(wb, fname);
 }
 
+
+  // ════════════════════════════════════════════════════════════════════════════
+// EUROSTAT HICP INTEGRATION — paste this block in place of your existing
+// "// ── Bank of Israel exchange rates ──" section through the end of the file
+// (i.e. replace BOI_SERIES, loadBoiRates, and the three init calls at the
+// bottom with everything below). Nothing above this point needs to change.
+// ════════════════════════════════════════════════════════════════════════════
+
 // ── Bank of Israel exchange rates ─────────────────────────────────────────────
 const BOI_SERIES = [
   { code: "BOI_USD_ILS", name: "USD / NIS", from: "1948-05" },
   { code: "BOI_EUR_ILS", name: "EUR / NIS", from: "1999-01" },
 ];
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-async function loadPinkSheet() {
-  try {
-    const res = await fetch('pink_sheet.json');
-    if (!res.ok) return;
-    const ps = await res.json();
-    ps.series.forEach(s => { WB_DATA[s.code] = s.data; });
-    const wbEntries = ps.series.map(s => ({
-      code:    s.code,
-      name:    s.name,
-      from:    s.data[0]?.date  || '',
-      to:      s.data[s.data.length - 1]?.date || '',
-      subject: `${s.category} · ${s.unit}`,
-      source:  'wb',
-    }));
-    CATALOG.push(...wbEntries);
-    filterCatalog();
-    console.log(`[Pink Sheet] ${ps.series.length} series loaded (updated ${ps.updated})`);
-  } catch(e) {
-    console.warn('[Pink Sheet] Not available:', e.message);
-  }
-}
 
 // Inject BOI exchange rate entries into catalog
 BOI_SERIES.forEach(s => CATALOG.push({
@@ -662,9 +647,109 @@ async function loadBoiRates() {
   }
 }
 
+// ── Eurostat HICP (consumer prices, by country & product) ────────────────────
+// Dataset: prc_hicp_midx — "HICP - monthly data (index)", base 2015=100.
+// Series key shape: M.{unit}.{coicop}.{geo}  e.g. M.I15.CP01181.DE = Germany, Sugar
+// Docs: https://ec.europa.eu/eurostat/web/hicp
+// NOTE: Eurostat flags this dataset as being superseded by prc_hicp_minr as part
+// of a Jan-2026 rebase to 2025=100 / ECOICOP v2. prc_hicp_midx was still being
+// updated as of the most recent provider update, but if Eurostat fully retires
+// it, switch DATASET below to 'prc_hicp_minr' and re-check whether coicop codes
+// and the unit parameter changed (ECOICOP v2 5-digit codes may differ from v1).
+const EUROSTAT_DATASET = "prc_hicp_midx";
+const EUROSTAT_UNIT    = "I15"; // index, 2015=100
+
+// fetchEurostatSeries() is kept only as an optional manual/live-debug helper
+// (e.g. call it from the browser console to pull one series on demand) — it
+// is NOT invoked automatically on page load. See loadEurostatHicp() below for
+// the actual init path, which loads a pre-fetched eurostat_hicp.json instead,
+// the same way pink_sheet.json / boi_rates.json already load. Catalog entries
+// for Eurostat series are populated directly from that JSON file's contents.
+async function fetchEurostatSeries(coicop, geo) {
+  const url = `https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/`
+            + `${EUROSTAT_DATASET}?format=JSON&freq=M&unit=${EUROSTAT_UNIT}`
+            + `&coicop=${coicop}&geo=${geo}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Eurostat HTTP ${res.status}`);
+  const js = await res.json(); // JSON-stat format
+
+  // JSON-stat: dimension "time" gives the ordered list of period labels (YYYY-MM),
+  // and js.value is a flat array aligned to that ordering (single-series query
+  // means time is effectively the only varying dimension).
+  const timeDim   = js.dimension?.time;
+  const timeIndex = timeDim?.category?.index;       // {"1996-01": 0, "1996-02": 1, ...}
+  if (!timeIndex) throw new Error("Unexpected Eurostat response shape (no time dimension)");
+
+  // Build ordered list of period keys
+  const periods = Object.entries(timeIndex)
+    .sort((a, b) => a[1] - b[1])
+    .map(([key]) => key);
+
+  const rows = [];
+  periods.forEach((period, i) => {
+    const val = js.value[i];
+    if (val === null || val === undefined) return;
+    // Eurostat period keys come as "1996-01" already — normalize just in case
+    const date = period.length === 7 ? period : period.replace(/(\d{4})M(\d{2})/, "$1-$2");
+    let pctYear = null;
+    const idx12Back = i - 12;
+    if (idx12Back >= 0 && js.value[idx12Back] != null) {
+      pctYear = +(((val / js.value[idx12Back]) - 1) * 100).toFixed(2);
+    }
+    rows.push({ date, value: val, pct: null, pct_year: pctYear });
+  });
+
+  return rows;
+}
+
+async function ensureEurostatLoaded(code) {
+  // code shape: EUROSTAT_{coicop}_{geo}  — geo itself may contain underscores
+  // (e.g. EU27_2020), so split off the fixed prefix/coicop and take the rest as geo.
+  const m = code.match(/^EUROSTAT_([A-Z0-9]+)_(.+)$/);
+  if (!m) throw new Error(`Malformed Eurostat code: ${code}`);
+  const [, coicop, geo] = m;
+  if (!WB_DATA[code]) {
+    WB_DATA[code] = await fetchEurostatSeries(coicop, geo);
+  }
+  return WB_DATA[code];
+}
+
+// PREFERRED PATH: load pre-fetched eurostat_hicp.json (built by
+// fetch_eurostat_hicp.py) the same way pink_sheet.json / boi_rates.json load.
+// This avoids Eurostat's JSON Statistics API, which returns an async-job
+// warning (HTTP 413 ASYNCHRONOUS_RESPONSE) for prc_hicp_midx queries even when
+// filtered to a single country+product — unworkable for a synchronous
+// client-side fetch(). The bulk TSV endpoint the Python script uses does not
+// have this problem. If you regenerate eurostat_hicp.json periodically (cron,
+// or manually re-run the script), this file simply loads bigger over time.
+async function loadEurostatHicp() {
+  try {
+    const res = await fetch('eurostat_hicp.json');
+    if (!res.ok) return;
+    const es = await res.json();
+    es.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const esEntries = es.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'eurostat',
+    }));
+    CATALOG.push(...esEntries);
+    filterCatalog();
+    console.log(`[Eurostat HICP] ${es.series.length} series loaded (updated ${es.updated})`);
+  } catch(e) {
+    console.warn('[Eurostat HICP] Not available:', e.message);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 filterCatalog();
 loadPinkSheet();
 loadBoiRates();
+loadEurostatHicp();
+
 </script>
 </body>
 </html>
