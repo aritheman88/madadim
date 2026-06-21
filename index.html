@@ -261,6 +261,8 @@ function filterCatalog() {
       ? `<span style="background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">WB</span>`
       : r.source === 'boi'
       ? `<span style="background:#2d1b4e;border:1px solid #a855f7;color:#c084fc;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">BOI</span>`
+      : r.source === 'eurostat'
+      ? `<span style="background:#1b2d4e;border:1px solid #facc15;color:#facc15;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">${esc((r.code.match(/^EUROSTAT_[A-Z0-9]+_(.+)$/)?.[1] || '').slice(0,2))}</span>`
       : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
       <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
@@ -293,11 +295,15 @@ function toggleIndex(code, name) {
     delete selectedMap[code];
   } else {
     if (Object.keys(selectedMap).length >= 10) {
-      setStatus("", "מקסימום 10 מדדים בו-זמנית");
+      setStatus("", "מקסימום 10 מדדים בו-זמנים");
       return;
     }
     const preloaded = WB_DATA[code] || null;
-    selectedMap[code] = { name, color: COLORS[colorIdx % COLORS.length], data: preloaded };
+    const catEntry  = CATALOG.find(r => r.code === code);
+    selectedMap[code] = {
+      name, color: COLORS[colorIdx % COLORS.length], data: preloaded,
+      subject: catEntry?.subject || '',
+    };
     colorIdx++;
   }
   renderChips();
@@ -305,6 +311,7 @@ function toggleIndex(code, name) {
 }
 
 // ── Chips ─────────────────────────────────────────────────────────────────────
+
 function renderChips() {
   const wrap = document.getElementById("chipsWrap");
   const entries = Object.entries(selectedMap);
@@ -312,12 +319,18 @@ function renderChips() {
     wrap.innerHTML = '<span class="chips-empty">בחר מדדים מהרשימה משמאל</span>';
     return;
   }
-  wrap.innerHTML = entries.map(([code, {name, color}]) =>
-    `<div class="chip" style="border-color:${color};color:${color}">
+  wrap.innerHTML = entries.map(([code, {name, color, subject}]) =>
+    `<div class="chip" style="border-color:${color};color:${color}" title="${esc(subject || '')}" onclick="toggleChipSubtitle('${code}')">
       <span>${esc(name)} (${code})</span>
-      <span class="remove" onclick="removeIndex('${code}')">✕</span>
-    </div>`
+      <span class="remove" onclick="event.stopPropagation();removeIndex('${code}')">✕</span>
+    </div>
+    <div class="chip-subtitle" id="subtitle-${code}" style="display:none;font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;padding:2px 10px 4px;width:100%;">${esc(subject || '')}</div>`
   ).join("");
+}
+
+function toggleChipSubtitle(code) {
+  const el = document.getElementById(`subtitle-${code}`);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function removeIndex(code) {
@@ -413,7 +426,7 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-  const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_'));
+const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_'));
 
   if (!cbsCodes.length) {
     // All selected series are pre-loaded (World Bank / BOI)
@@ -432,7 +445,7 @@ async function fetchSelected() {
 
   let done = 0;
   for (const code of codes) {
-    if (code.startsWith('WB_') || code.startsWith('BOI_')) { done++; continue; }
+if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
