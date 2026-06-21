@@ -631,6 +631,29 @@ function downloadXlsx() {
 // bottom with everything below). Nothing above this point needs to change.
 // ════════════════════════════════════════════════════════════════════════════
 
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function loadPinkSheet() {
+  try {
+    const res = await fetch('pink_sheet.json');
+    if (!res.ok) return;
+    const ps = await res.json();
+    ps.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const wbEntries = ps.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'wb',
+    }));
+    CATALOG.push(...wbEntries);
+    filterCatalog();
+    console.log(`[Pink Sheet] ${ps.series.length} series loaded (updated ${ps.updated})`);
+  } catch(e) {
+    console.warn('[Pink Sheet] Not available:', e.message);
+  }
+}
+
 // ── Bank of Israel exchange rates ─────────────────────────────────────────────
 const BOI_SERIES = [
   { code: "BOI_USD_ILS", name: "USD / NIS", from: "1948-05" },
