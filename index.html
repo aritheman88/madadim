@@ -185,7 +185,7 @@ function checkPassword(){
         <div class="range-inputs">
           <input type="month" id="fromDate" value="2010-01">
           <span class="sep">→</span>
-          <input type="month" id="toDate">
+          <input type="month" id="toDate"   value="2026-05">
         </div>
       </div>
       <div class="control-group">
@@ -561,16 +561,6 @@ function setStatus(state, msg) {
 document.getElementById("fromDate").addEventListener("change", () => { if(chart) updateChart(); });
 document.getElementById("toDate").addEventListener("change",   () => { if(chart) updateChart(); });
 
-// Set toDate default to one month before current month
-(function() {
-  const now = new Date();
-  now.setMonth(now.getMonth() - 1);
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  document.getElementById('toDate').value = `${yyyy}-${mm}`;
-})();
-
-function downloadXlsx() {
 
 function downloadXlsx() {
   const entries = Object.entries(selectedMap).filter(([,v]) => v.data && v.data.length);
