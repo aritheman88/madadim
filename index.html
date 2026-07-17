@@ -185,7 +185,7 @@ function checkPassword(){
         <div class="range-inputs">
           <input type="month" id="fromDate" value="2010-01">
           <span class="sep">→</span>
-          <input type="month" id="toDate"   value="2026-05">
+          <input type="month" id="toDate">
         </div>
       </div>
       <div class="control-group">
@@ -366,57 +366,93 @@ async function fetchIndex(code, fromYm, toYm) {
     return `${m}-${y}`;
   }
 
-  const baseUrl = `${API}?id=${code}&startPeriod=${cbsPeriod(fromYm)}&endPeriod=${cbsPeriod(toYm)}&format=xml&lang=he&baseType=1`;
-
-  const allRows = [];
-  let page = 1;
-  while (true) {
-    const url = page === 1 ? baseUrl : `${baseUrl}&page=${page}`;
-    const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${code}`);
-    const text = await res.text();
-    const xml  = new DOMParser().parseFromString(text, "application/xml");
-    if (xml.querySelector("parsererror")) throw new Error("XML parse error");
-
-    xml.querySelectorAll("DateMonth").forEach(dm => {
-      const year  = dm.querySelector("year")?.textContent?.trim();
-      const month = dm.querySelector("month")?.textContent?.trim().padStart(2, "0");
-      const base  = dm.querySelector("currBase");
-      const val   = parseFloat(base?.querySelector("value")?.textContent);
-      const pct   = parseFloat(dm.querySelector("percent")?.textContent);
-      const pctY  = parseFloat(dm.querySelector("percentYear")?.textContent);
-      if (year && month && !isNaN(val))
-        allRows.push({ date: `${year}-${month}`, value: val, pct: isNaN(pct) ? null : pct, pct_year: isNaN(pctY) ? null : pctY });
-    });
-
-    const lastPage    = parseInt(xml.querySelector("last_page")?.textContent    || "1");
-    const currentPage = parseInt(xml.querySelector("current_page")?.textContent || "1");
-    if (currentPage >= lastPage) break;
-    page++;
+  function addMonths(ym, n) {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
 
-  const seen = new Set(), rows = [];
-  allRows.sort((a, b) => a.date.localeCompare(b.date));
-  for (const r of allRows) {
-    if (!seen.has(r.date)) { seen.add(r.date); rows.push(r); }
-  }
+  // Fetch one contiguous [chunkFrom, chunkTo] range from the CBS API,
+  // paging through all result pages and de-duplicating by date.
+  async function fetchChunk(chunkFrom, chunkTo) {
+    const baseUrl = `${API}?id=${code}&startPeriod=${cbsPeriod(chunkFrom)}&endPeriod=${cbsPeriod(chunkTo)}&format=xml&lang=he&baseType=1`;
 
-  // Reconstruct via pct chain — avoids the API's broken base period resets
-  let currentVal = rows[0].value;
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].pct !== null) {
-      currentVal = currentVal * (1 + rows[i].pct / 100);
+    const raw = [];
+    let page = 1;
+    while (true) {
+      const url = page === 1 ? baseUrl : `${baseUrl}&page=${page}`;
+      const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${code}`);
+      const text = await res.text();
+      const xml  = new DOMParser().parseFromString(text, "application/xml");
+      if (xml.querySelector("parsererror")) throw new Error("XML parse error");
+
+      xml.querySelectorAll("DateMonth").forEach(dm => {
+        const year  = dm.querySelector("year")?.textContent?.trim();
+        const month = dm.querySelector("month")?.textContent?.trim().padStart(2, "0");
+        const base  = dm.querySelector("currBase");
+        const val   = parseFloat(base?.querySelector("value")?.textContent);
+        const pct   = parseFloat(dm.querySelector("percent")?.textContent);
+        const pctY  = parseFloat(dm.querySelector("percentYear")?.textContent);
+        if (year && month && !isNaN(val))
+          raw.push({ date: `${year}-${month}`, value: val, pct: isNaN(pct) ? null : pct, pct_year: isNaN(pctY) ? null : pctY });
+      });
+
+      const lastPage    = parseInt(xml.querySelector("last_page")?.textContent    || "1");
+      const currentPage = parseInt(xml.querySelector("current_page")?.textContent || "1");
+      if (currentPage >= lastPage) break;
+      page++;
     }
-    rows[i].value = currentVal;
+
+    const seen = new Set(), rows = [];
+    raw.sort((a, b) => a.date.localeCompare(b.date));
+    for (const r of raw) {
+      if (!seen.has(r.date)) { seen.add(r.date); rows.push(r); }
+    }
+    return rows;
   }
 
-  // Rescale to 2010=100
-  const v2010 = rows.filter(r => r.date.startsWith("2010")).map(r => r.value);
-  if (v2010.length) {
-    const avg = v2010.reduce((a, b) => a + b, 0) / v2010.length;
-    rows.forEach(r => r.value = Math.round(r.value / avg * 1000) / 10);
+  // The CBS API silently switches currBase to a different base period once a
+  // requested range spans enough time, which makes raw values from a single
+  // long request incomparable across the range. To work around this, split
+  // the requested range into chunks that advance 59 months at a time (a
+  // 60-month span per chunk), so each consecutive pair of chunks shares
+  // exactly one overlapping month. That shared month lets us compute a scale
+  // factor between chunks and chain them onto a single consistent base.
+  const chunkRanges = [];
+  let chunkStart = fromYm;
+  while (chunkStart <= toYm) {
+    const chunkEnd = addMonths(chunkStart, 59);
+    const cappedEnd = chunkEnd > toYm ? toYm : chunkEnd;
+    chunkRanges.push([chunkStart, cappedEnd]);
+    if (cappedEnd >= toYm) break;
+    chunkStart = chunkEnd;
   }
 
+  let rows = [];
+  for (let i = 0; i < chunkRanges.length; i++) {
+    const [cFrom, cTo] = chunkRanges[i];
+    const chunkRows = await fetchChunk(cFrom, cTo);
+    if (!chunkRows.length) continue;
+
+    if (i === 0) {
+      rows = chunkRows;
+      continue;
+    }
+
+    // The overlap month is the boundary date shared with the previous chunk.
+    const overlapDate = chunkRanges[i - 1][1];
+    const prevRow = rows.find(r => r.date === overlapDate);
+    const currRow = chunkRows.find(r => r.date === overlapDate);
+    const scaleFactor = (prevRow && currRow && currRow.value) ? prevRow.value / currRow.value : 1;
+
+    chunkRows.forEach(r => {
+      if (r.date === overlapDate) return; // already have this month from the previous chunk
+      rows.push({ ...r, value: r.value * scaleFactor });
+    });
+  }
+
+  rows.sort((a, b) => a.date.localeCompare(b.date));
   return rows;
 }
 
@@ -560,6 +596,14 @@ function setStatus(state, msg) {
 
 document.getElementById("fromDate").addEventListener("change", () => { if(chart) updateChart(); });
 document.getElementById("toDate").addEventListener("change",   () => { if(chart) updateChart(); });
+
+(function() {
+  const now = new Date();
+  now.setMonth(now.getMonth() - 1);
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  document.getElementById('toDate').value = `${yyyy}-${mm}`;
+})();
 
 
 function downloadXlsx() {
