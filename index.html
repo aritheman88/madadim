@@ -24,7 +24,8 @@
 .modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
 .beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;min-height:100vh;display:flex;flex-direction:column;}
+html{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
 header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
 header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
@@ -81,7 +82,7 @@ input[type="month"]:focus{border-color:var(--accent);}
 .dot.error{background:var(--danger);}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-.chart-wrap{flex:1;padding:16px 20px;min-height:300px;position:relative;}
+.chart-wrap{flex:1;padding:16px 20px;min-height:0;position:relative;}
 canvas{width:100%!important;height:100%!important;}
 
 /* Scrollbar */
@@ -164,6 +165,7 @@ function checkPassword(){
   <h1>CBS // Price Index Explorer</h1>
   <span class="beta-badge">BETA</span>
   <p>הלשכה המרכזית לסטטיסטיקה · 1254 מדדים · Generated: 2026-05-27 13:00</p>
+  <a href="/change/" style="margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;">חישוב שינוי מחיר ▶</a>
 </header>
 
 <div class="layout">

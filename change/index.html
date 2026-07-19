@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBS // Price Change Calculator</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Hebrew:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--surface:#161922;--border:#252a35;--text:#e2e8f0;--muted:#6b7585;--accent:#4ade80;--warn:#f59e0b;--danger:#f87171;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+.overlay.hidden{display:none;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px 36px;max-width:480px;width:90%;text-align:center;direction:rtl;}
+.modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
+.modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
+.modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
+.modal input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:.9rem;border-radius:4px;outline:none;margin-top:16px;text-align:center;}
+.modal input[type=password]:focus{border-color:var(--accent);}
+.modal .err{color:var(--danger);font-size:.75rem;font-family:'IBM Plex Mono',monospace;margin-top:8px;min-height:18px;}
+.modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
+.modal button:hover{opacity:.85;}
+.modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
+header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+header a.back{margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;}
+
+.layout{display:flex;flex:1;min-height:0;}
+
+.side{width:380px;min-width:300px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:14px;}
+.field label{display:block;font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.field textarea{width:100%;height:220px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;border-radius:4px;outline:none;resize:vertical;direction:ltr;text-align:left;}
+.field textarea:focus{border-color:var(--accent);}
+.field .hint{font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:6px;line-height:1.5;}
+.range-inputs{display:flex;align-items:center;gap:8px;}
+input[type="month"]{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 10px;font-family:'IBM Plex Mono',monospace;font-size:.8rem;border-radius:4px;outline:none;flex:1;}
+input[type="month"]:focus{border-color:var(--accent);}
+.sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.8rem;}
+.calc-btn{padding:10px 18px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;transition:opacity .2s;}
+.calc-btn:hover{opacity:.85;}
+.calc-btn:disabled{opacity:.4;cursor:not-allowed;}
+.xlsx-btn{padding:9px 16px;border-radius:4px;border:1px solid #22c55e;background:var(--surface);color:#22c55e;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.75rem;transition:all .2s;}
+.xlsx-btn:hover{background:#22c55e22;}
+.xlsx-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.status-bar{padding:5px 20px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--border);min-height:26px;display:flex;align-items:center;gap:10px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0;}
+.dot.loading{background:var(--warn);animation:pulse 1s infinite;}
+.dot.ok{background:var(--accent);}
+.dot.error{background:var(--danger);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.table-wrap{flex:1;overflow:auto;padding:16px 20px;}
+table{width:100%;border-collapse:collapse;font-size:.82rem;}
+th{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);}
+td{padding:8px 10px;border-bottom:1px solid var(--border);}
+td.code{font-family:'IBM Plex Mono',monospace;color:var(--muted);}
+td.num{font-family:'IBM Plex Mono',monospace;direction:ltr;text-align:left;}
+td.pct.up{color:var(--accent);}
+td.pct.down{color:var(--danger);}
+td.err{color:var(--danger);font-size:.75rem;}
+tr:hover td{background:var(--surface);}
+.empty-state{color:var(--muted);font-size:.85rem;padding:40px;text-align:center;}
+
+.side::-webkit-scrollbar,.table-wrap::-webkit-scrollbar{width:6px;}
+.side::-webkit-scrollbar-track,.table-wrap::-webkit-scrollbar-track{background:var(--bg);}
+.side::-webkit-scrollbar-thumb,.table-wrap::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- Disclaimer -->
+<div class="overlay hidden" id="disclaimerOverlay">
+  <div class="modal">
+    <h2>CBS // Price Change Calculator</h2>
+    <p>אין להסתמך על הנתונים המופיעים באתר זה לצורך ביצוע עסקאות ו/או פעולות.</p>
+    <p>מטרת הנתונים היא להוות כלי עזר בלבד בצירוף עם נתונים או חישובים אחרים.</p>
+    <p>אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם או ייגרם כתוצאה מהסתמכות על הנתונים.</p>
+    <hr class="divider">
+    <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
+    <button onclick="showPassword()">הבנתי, המשך</button>
+  </div>
+</div>
+
+<!-- Password -->
+<div class="overlay hidden" id="passwordOverlay">
+  <div class="modal">
+    <h2>// גישה מוגבלת</h2>
+    <p>הזן סיסמה להמשך</p>
+    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="err" id="pwErr"></div>
+    <button onclick="checkPassword()">כניסה</button>
+  </div>
+</div>
+
+<script>
+document.getElementById('disclaimerOverlay').classList.remove('hidden');
+function showPassword(){
+  document.getElementById('disclaimerOverlay').classList.add('hidden');
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('pwInput').focus(),100);
+}
+function checkPassword(){
+  const val = document.getElementById('pwInput').value;
+  if(val === 'Lamas'){
+    document.getElementById('passwordOverlay').classList.add('hidden');
+  } else {
+    const err = document.getElementById('pwErr');
+    err.textContent = 'סיסמה שגויה';
+    document.getElementById('pwInput').value='';
+    setTimeout(()=>err.textContent='', 2000);
+  }
+}
+</script>
+
+<header>
+  <h1>CBS // Price Change Calculator</h1>
+  <span class="beta-badge">BETA</span>
+  <p>שינוי מחיר מצטבר בין שני תאריכים עבור רשימת מדדים</p>
+  <a class="back" href="/">◀ חזרה למדדים</a>
+</header>
+
+<div class="layout">
+  <div class="side">
+    <div class="field">
+      <label>קודי מדדים (שורה לכל מדד)</label>
+      <textarea id="codesInput" placeholder="190230&#10;190230, לחם אחיד&#10;120010 | מדד כללי"></textarea>
+      <div class="hint">שורה אחת לכל מדד. ניתן להוסיף תווית אופציונלית אחרי פסיק או "|", למשל: <code>190230, לחם אחיד</code></div>
+    </div>
+    <div class="field">
+      <label>טווח תאריכים</label>
+      <div class="range-inputs">
+        <input type="month" id="fromDate" value="2010-01">
+        <span class="sep">→</span>
+        <input type="month" id="toDate">
+      </div>
+    </div>
+    <button class="calc-btn" id="calcBtn" onclick="calculate()">חשב שינוי ▶</button>
+    <button class="xlsx-btn" id="xlsxBtn" onclick="downloadXlsx()" disabled>⬇ XLSX</button>
+  </div>
+
+  <div class="main">
+    <div class="status-bar">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">מוכן</span>
+    </div>
+    <div class="table-wrap" id="tableWrap">
+      <div class="empty-state">הזן קודי מדדים וטווח תאריכים, ולחץ "חשב שינוי"</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Default "to" date = current month ──────────────────────────────────────
+(function(){
+  const d = new Date();
+  document.getElementById('toDate').value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+})();
+
+function setStatus(kind, text){
+  const dot = document.getElementById('dot');
+  dot.className = 'dot' + (kind ? ' ' + kind : '');
+  document.getElementById('statusText').textContent = text;
+}
+
+// ── Fetch (same robust logic as the main explorer) ──────────────────────────
+const API = "https://api.cbs.gov.il/index/data/price";
+
+function cbsPeriod(ym) {
+  const [y, m] = ym.split("-");
+  return `${m}-${y}`;
+}
+
+async function fetchIndex(code, fromYm, toYm) {
+  function addMonths(ym, n) {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  async function fetchChunk(chunkFrom, chunkTo) {
+    const baseUrl = `${API}?id=${code}&startPeriod=${cbsPeriod(chunkFrom)}&endPeriod=${cbsPeriod(chunkTo)}&format=xml&lang=he&baseType=1`;
+
+    const raw = [];
+    let page = 1;
+    while (true) {
+      const url = page === 1 ? baseUrl : `${baseUrl}&page=${page}`;
+      const res = await fetch(url, { headers: { Accept: "application/xml,text/xml,*/*" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${code}`);
+      const text = await res.text();
+      const xml  = new DOMParser().parseFromString(text, "application/xml");
+      if (xml.querySelector("parsererror")) throw new Error("XML parse error");
+
+      xml.querySelectorAll("DateMonth").forEach(dm => {
+        const year  = dm.querySelector("year")?.textContent?.trim();
+        const month = dm.querySelector("month")?.textContent?.trim().padStart(2, "0");
+        const base  = dm.querySelector("currBase");
+        const val   = parseFloat(base?.querySelector("value")?.textContent);
+        const pct   = parseFloat(dm.querySelector("percent")?.textContent);
+        if (year && month && !isNaN(val))
+          raw.push({ date: `${year}-${month}`, value: val, pct: isNaN(pct) ? null : pct });
+      });
+
+      const lastPage    = parseInt(xml.querySelector("last_page")?.textContent    || "1");
+      const currentPage = parseInt(xml.querySelector("current_page")?.textContent || "1");
+      if (currentPage >= lastPage) break;
+      page++;
+    }
+
+    const seen = new Set(), rows = [];
+    raw.sort((a, b) => a.date.localeCompare(b.date));
+    for (const r of raw) {
+      if (!seen.has(r.date)) { seen.add(r.date); rows.push(r); }
+    }
+    return rows;
+  }
+
+  // Split into 60-month chunks (a single request can silently span a CBS
+  // base-period revision; chunking bounds how much of that we fetch at once).
+  const chunkRanges = [];
+  let chunkStart = fromYm;
+  while (chunkStart <= toYm) {
+    const chunkEnd = addMonths(chunkStart, 59);
+    const cappedEnd = chunkEnd > toYm ? toYm : chunkEnd;
+    chunkRanges.push([chunkStart, cappedEnd]);
+    if (cappedEnd >= toYm) break;
+    chunkStart = chunkEnd;
+  }
+
+  let rows = [];
+  for (const [cFrom, cTo] of chunkRanges) {
+    const chunkRows = await fetchChunk(cFrom, cTo);
+    if (!chunkRows.length) continue;
+    const existingDates = new Set(rows.map(r => r.date));
+    chunkRows.forEach(r => { if (!existingDates.has(r.date)) rows.push(r); });
+  }
+  rows.sort((a, b) => a.date.localeCompare(b.date));
+
+  // CBS periodically revises the official base period for a series; the raw
+  // `value` field reflects whichever base was in force for that month, which
+  // makes raw levels incomparable across a revision. Rebuild a continuously-
+  // chained series from the month-over-month `percent` figure instead, which
+  // stays valid across any base change regardless of where it falls.
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].pct != null && !isNaN(rows[i].pct)) {
+      rows[i].value = rows[i - 1].value * (1 + rows[i].pct / 100);
+    }
+  }
+  return rows;
+}
+
+// ── Parse the codes textarea ─────────────────────────────────────────────
+function parseCodeLines(text) {
+  const out = [];
+  const seen = new Set();
+  text.split(/\n/).forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const parts = line.split(/[,|]/);
+    const code = parts[0].trim();
+    const label = parts.slice(1).join(",").trim();
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    out.push({ code, label });
+  });
+  return out;
+}
+
+// ── Calculate ─────────────────────────────────────────────────────────────
+let lastResults = [];
+
+async function calculate() {
+  const entries = parseCodeLines(document.getElementById('codesInput').value);
+  if (!entries.length) { setStatus('error', 'הזן לפחות קוד מדד אחד'); return; }
+
+  const fromYm = document.getElementById('fromDate').value;
+  const toYm   = document.getElementById('toDate').value;
+  if (!fromYm || !toYm) { setStatus('error', 'בחר טווח תאריכים'); return; }
+  if (fromYm > toYm) { setStatus('error', 'תאריך ההתחלה מאוחר מתאריך הסיום'); return; }
+
+  const btn = document.getElementById('calcBtn');
+  btn.disabled = true;
+  document.getElementById('xlsxBtn').disabled = true;
+
+  const results = [];
+  for (let i = 0; i < entries.length; i++) {
+    const { code, label } = entries[i];
+    setStatus('loading', `טוען ${code}... [${i+1}/${entries.length}]`);
+    try {
+      const rows = await fetchIndex(code, fromYm, toYm);
+      if (!rows.length) {
+        results.push({ code, label, error: 'אין נתונים בטווח שנבחר' });
+        continue;
+      }
+      const startRow = rows[0];
+      const endRow   = rows[rows.length - 1];
+      const pctChange = (endRow.value / startRow.value - 1) * 100;
+      results.push({
+        code, label,
+        startDate: startRow.date, startVal: startRow.value,
+        endDate: endRow.date, endVal: endRow.value,
+        pctChange,
+      });
+    } catch (e) {
+      results.push({ code, label, error: e.message });
+    }
+  }
+
+  lastResults = results;
+  renderTable(results);
+  btn.disabled = false;
+  document.getElementById('xlsxBtn').disabled = results.every(r => r.error) ;
+  const okCount = results.filter(r => !r.error).length;
+  setStatus(okCount ? 'ok' : 'error', `${okCount}/${results.length} מדדים חושבו · ${fromYm} → ${toYm}`);
+}
+
+function fmtPct(p) {
+  const sign = p > 0 ? '+' : '';
+  return `${sign}${p.toFixed(2)}%`;
+}
+
+function renderTable(results) {
+  const wrap = document.getElementById('tableWrap');
+  if (!results.length) {
+    wrap.innerHTML = '<div class="empty-state">אין תוצאות</div>';
+    return;
+  }
+  let html = '<table><thead><tr>' +
+    '<th>קוד</th><th>תווית</th><th>תאריך התחלה</th><th>ערך התחלה</th>' +
+    '<th>תאריך סיום</th><th>ערך סיום</th><th>שינוי מצטבר</th>' +
+    '</tr></thead><tbody>';
+  results.forEach(r => {
+    if (r.error) {
+      html += `<tr><td class="code">${r.code}</td><td>${r.label||''}</td><td class="err" colspan="5">${r.error}</td></tr>`;
+    } else {
+      const cls = r.pctChange > 0 ? 'up' : (r.pctChange < 0 ? 'down' : '');
+      html += `<tr>
+        <td class="code">${r.code}</td>
+        <td>${r.label||''}</td>
+        <td class="num">${r.startDate}</td>
+        <td class="num">${r.startVal.toFixed(2)}</td>
+        <td class="num">${r.endDate}</td>
+        <td class="num">${r.endVal.toFixed(2)}</td>
+        <td class="num pct ${cls}">${fmtPct(r.pctChange)}</td>
+      </tr>`;
+    }
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+function downloadXlsx() {
+  if (!lastResults.length) return;
+  const rows = lastResults.map(r => r.error ? {
+    'קוד': r.code, 'תווית': r.label || '', 'שגיאה': r.error,
+  } : {
+    'קוד': r.code, 'תווית': r.label || '',
+    'תאריך התחלה': r.startDate, 'ערך התחלה': +r.startVal.toFixed(4),
+    'תאריך סיום': r.endDate, 'ערך סיום': +r.endVal.toFixed(4),
+    'שינוי מצטבר %': +r.pctChange.toFixed(2),
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'שינוי מחירים');
+  const fromYm = document.getElementById('fromDate').value;
+  const toYm   = document.getElementById('toDate').value;
+  XLSX.writeFile(wb, `price_change_${fromYm}_${toYm}.xlsx`);
+}
+</script>
+
+</body>
+</html>
