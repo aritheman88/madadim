@@ -412,13 +412,12 @@ async function fetchIndex(code, fromYm, toYm) {
     return rows;
   }
 
-  // The CBS API silently switches currBase to a different base period once a
-  // requested range spans enough time, which makes raw values from a single
-  // long request incomparable across the range. To work around this, split
-  // the requested range into chunks that advance 59 months at a time (a
-  // 60-month span per chunk), so each consecutive pair of chunks shares
-  // exactly one overlapping month. That shared month lets us compute a scale
-  // factor between chunks and chain them onto a single consistent base.
+  // The CBS price API only returns data for a bounded span per request, so we
+  // split the requested range into chunks that advance 59 months at a time (a
+  // 60-month span per chunk), with a one-month overlap between consecutive
+  // chunks so we can detect and drop the duplicate. (Raw values are NOT
+  // stitched across chunks here -- see the percent-chain reconstruction
+  // below, which handles cross-chunk AND within-chunk base rebases alike.)
   const chunkRanges = [];
   let chunkStart = fromYm;
   while (chunkStart <= toYm) {
@@ -435,24 +434,35 @@ async function fetchIndex(code, fromYm, toYm) {
     const chunkRows = await fetchChunk(cFrom, cTo);
     if (!chunkRows.length) continue;
 
-    if (i === 0) {
-      rows = chunkRows;
-      continue;
-    }
-
-    // The overlap month is the boundary date shared with the previous chunk.
-    const overlapDate = chunkRanges[i - 1][1];
-    const prevRow = rows.find(r => r.date === overlapDate);
-    const currRow = chunkRows.find(r => r.date === overlapDate);
-    const scaleFactor = (prevRow && currRow && currRow.value) ? prevRow.value / currRow.value : 1;
-
+    const existingDates = new Set(rows.map(r => r.date));
     chunkRows.forEach(r => {
-      if (r.date === overlapDate) return; // already have this month from the previous chunk
-      rows.push({ ...r, value: r.value * scaleFactor });
+      if (!existingDates.has(r.date)) rows.push(r); // skip dates we already have from an earlier chunk
     });
   }
 
   rows.sort((a, b) => a.date.localeCompare(b.date));
+
+  // CBS periodically revises the official base period for a series (roughly
+  // every 1-2 years, e.g. "average 2012=100" becoming "average 2014=100"),
+  // and the raw `value` field returned for a given month reflects whichever
+  // base was officially in force for THAT month. That revision date is a
+  // real calendar event unrelated to how we've windowed our requests above,
+  // so it can (and does) fall in the middle of a single 60-month chunk, not
+  // just at a chunk boundary -- a boundary-only scale correction misses it
+  // entirely, producing a spurious jump/drop in the raw series right at the
+  // rebase date. The month-over-month `percent` figure CBS publishes is not
+  // subject to this (it's a like-for-like comparison of two adjacent months),
+  // so we rebuild a single continuously-chained series from it instead of
+  // trusting the raw absolute values across the whole range.
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].pct != null && !isNaN(rows[i].pct)) {
+      rows[i].value = rows[i - 1].value * (1 + rows[i].pct / 100);
+    }
+    // else: no MoM % published for this month (rare) -- leave the raw value
+    // as-is; this is a best-effort fallback and can't correct for a rebase
+    // landing exactly on such a month.
+  }
+
   return rows;
 }
 
