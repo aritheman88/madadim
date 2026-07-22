@@ -31,11 +31,21 @@ header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospa
 
 .layout{display:flex;flex-direction:column;flex:1;min-height:0;}
 
-.controls{padding:14px 24px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;border-bottom:1px solid var(--border);}
+.controls{padding:14px 24px;display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap;border-bottom:1px solid var(--border);}
 .control-group{display:flex;flex-direction:column;gap:5px;}
 .control-group label{font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;}
 select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;border-radius:4px;outline:none;min-width:260px;}
 select:focus{border-color:var(--accent);}
+input[type=number]{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;border-radius:4px;outline:none;width:88px;text-align:center;}
+input[type=number]:focus{border-color:var(--accent);}
+.year-range{display:flex;align-items:center;gap:8px;}
+.year-range .sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.8rem;}
+
+.bench-group{display:flex;flex-direction:column;gap:5px;}
+.bench-checks{display:flex;gap:14px;padding-top:2px;}
+.bench-check{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:.78rem;cursor:pointer;user-select:none;}
+.bench-check input{accent-color:var(--accent);cursor:pointer;}
+.bench-swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
 
 .status-bar{padding:5px 24px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--border);min-height:26px;display:flex;align-items:center;gap:10px;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0;}
@@ -123,7 +133,37 @@ function checkPassword(){
   <div class="controls">
     <div class="control-group">
       <label>מדינה</label>
-      <select id="countrySelect" onchange="renderChart()"></select>
+      <select id="countrySelect" onchange="onCountryChange()"></select>
+    </div>
+
+    <div class="control-group">
+      <label>טווח שנים</label>
+      <div class="year-range">
+        <input type="number" id="fromYear" onchange="onYearRangeChange()">
+        <span class="sep">→</span>
+        <input type="number" id="toYear" onchange="onYearRangeChange()">
+      </div>
+    </div>
+
+    <div class="bench-group">
+      <label>מדדי השוואה</label>
+      <div class="bench-checks">
+        <label class="bench-check">
+          <input type="checkbox" id="chkHenryHub" onchange="renderChart()">
+          <span class="bench-swatch" style="background:#fbbf24;"></span>
+          Henry Hub
+        </label>
+        <label class="bench-check">
+          <input type="checkbox" id="chkTTF" onchange="renderChart()">
+          <span class="bench-swatch" style="background:#c084fc;"></span>
+          TTF
+        </label>
+        <label class="bench-check">
+          <input type="checkbox" id="chkNBP" onchange="renderChart()">
+          <span class="bench-swatch" style="background:#34d399;"></span>
+          NBP
+        </label>
+      </div>
     </div>
   </div>
 
@@ -137,7 +177,14 @@ function checkPassword(){
 
 <script>
 let GAS_DATA = null;
+let BENCH_DATA = null;
 let chart = null;
+
+const BENCH_META = {
+  chkHenryHub: { key: "Henry Hub", label: "Henry Hub", color: "#fbbf24" },
+  chkTTF:      { key: "TTF",       label: "TTF (Yahoo, 2017+)", color: "#c084fc" },
+  chkNBP:      { key: "NBP",       label: "NBP", color: "#34d399" },
+};
 
 function setStatus(state, msg) {
   document.getElementById("dot").className = "dot " + state;
@@ -147,9 +194,13 @@ function setStatus(state, msg) {
 async function init() {
   setStatus("loading", "טוען נתוני גז...");
   try {
-    const res = await fetch("gas_data.json");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    GAS_DATA = await res.json();
+    const [gasRes, benchRes] = await Promise.all([
+      fetch("gas_data.json"),
+      fetch("benchmarks.json"),
+    ]);
+    if (!gasRes.ok) throw new Error(`gas_data.json HTTP ${gasRes.status}`);
+    GAS_DATA = await gasRes.json();
+    BENCH_DATA = benchRes.ok ? await benchRes.json() : { benchmarks: {} };
   } catch (e) {
     setStatus("error", `שגיאה בטעינת הנתונים: ${e.message}`);
     return;
@@ -162,16 +213,64 @@ async function init() {
   const preferred = countries.includes("United Kingdom") ? "United Kingdom" : countries[0];
   select.value = preferred;
 
-  setStatus("ok", `נטענו ${countries.length} מדינות · עודכן: ${GAS_DATA.generated}`);
-  renderChart();
+  const benchYearCount = Object.values(BENCH_DATA.benchmarks || {})
+    .reduce((n, obj) => n + Object.keys(obj).length, 0);
+  setStatus("ok", `נטענו ${countries.length} מדינות · ${benchYearCount} נקודות מדד השוואה · עודכן: ${GAS_DATA.generated}`);
+
+  onCountryChange();
 }
 
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function escAttr(s){ return esc(s).replace(/"/g,"&quot;"); }
 
-// Compute min/max for two axes so that "0" sits at the same relative
-// height on both — avoids the misleading look of independently
-// auto-scaled dual axes.
+// ── Year-range bounds ────────────────────────────────────────────────────
+// The inputs default to the selected country's own data range, but their
+// min/max attributes extend to cover every benchmark series too, so widening
+// the range to see benchmark-only years (e.g. Henry Hub back to 1997) works
+// even if the country itself has no data that far back.
+function computeYearBounds(country) {
+  const records = GAS_DATA.countries[country] || [];
+  const countryYears = records.map(r => r.year);
+
+  let allYears = [...countryYears];
+  Object.values(BENCH_DATA.benchmarks || {}).forEach(obj => {
+    allYears = allYears.concat(Object.keys(obj).map(Number));
+  });
+
+  const absoluteMin = allYears.length ? Math.min(...allYears) : 2000;
+  const absoluteMax = allYears.length ? Math.max(...allYears) : new Date().getFullYear();
+  const defaultMin = countryYears.length ? Math.min(...countryYears) : absoluteMin;
+  const defaultMax = countryYears.length ? Math.max(...countryYears) : absoluteMax;
+
+  return { absoluteMin, absoluteMax, defaultMin, defaultMax };
+}
+
+function onCountryChange() {
+  const country = document.getElementById("countrySelect").value;
+  const bounds = computeYearBounds(country);
+
+  const fromInput = document.getElementById("fromYear");
+  const toInput = document.getElementById("toYear");
+  fromInput.min = toInput.min = bounds.absoluteMin;
+  fromInput.max = toInput.max = bounds.absoluteMax;
+  fromInput.value = bounds.defaultMin;
+  toInput.value = bounds.defaultMax;
+
+  renderChart();
+}
+
+function onYearRangeChange() {
+  const fromInput = document.getElementById("fromYear");
+  const toInput = document.getElementById("toYear");
+  let from = parseInt(fromInput.value, 10);
+  let to = parseInt(toInput.value, 10);
+  if (from > to) { [from, to] = [to, from]; }
+  fromInput.value = from;
+  toInput.value = to;
+  renderChart();
+}
+
+// ── Axis sync helper (kept from the single-country version) ────────────────
 function syncZeroAxes(minA, maxA, minB, maxB, pad) {
   pad = pad || 0.08;
   function parts(mn, mx) {
@@ -199,14 +298,51 @@ function extent(values) {
 
 function renderChart() {
   const country = document.getElementById("countrySelect").value;
-  const records = (GAS_DATA.countries[country] || []).slice();
+  const fromYear = parseInt(document.getElementById("fromYear").value, 10);
+  const toYear = parseInt(document.getElementById("toYear").value, 10);
 
-  const years = records.map(r => r.year);
-  const imports = records.map(r => r.imports);
-  const prices = records.map(r => r.price);
+  const records = (GAS_DATA.countries[country] || [])
+    .filter(r => r.year >= fromYear && r.year <= toYear);
+
+  const activeBenches = Object.entries(BENCH_META)
+    .filter(([id]) => document.getElementById(id).checked)
+    .map(([id, meta]) => meta);
+
+  const yearSet = new Set(records.map(r => r.year));
+  activeBenches.forEach(meta => {
+    const series = (BENCH_DATA.benchmarks || {})[meta.key] || {};
+    Object.keys(series).map(Number).forEach(y => {
+      if (y >= fromYear && y <= toYear) yearSet.add(y);
+    });
+  });
+  const years = [...yearSet].sort((a, b) => a - b);
+
+  const recordByYear = new Map(records.map(r => [r.year, r]));
+  const imports = years.map(y => recordByYear.has(y) ? recordByYear.get(y).imports : null);
+  const countryPrice = years.map(y => recordByYear.has(y) ? recordByYear.get(y).price : null);
+
+  const benchDatasets = activeBenches.map(meta => {
+    const series = (BENCH_DATA.benchmarks || {})[meta.key] || {};
+    const data = years.map(y => (y in series) ? series[y] : (series[String(y)] ?? null));
+    return {
+      type: "line",
+      label: meta.label,
+      data,
+      borderColor: meta.color,
+      backgroundColor: meta.color,
+      borderWidth: 1.6,
+      borderDash: [4, 3],
+      pointRadius: 2,
+      pointHoverRadius: 4,
+      tension: 0.15,
+      spanGaps: true,
+      yAxisID: "y1",
+    };
+  });
 
   const impExt = extent(imports);
-  const priceExt = extent(prices);
+  const allPriceValues = countryPrice.concat(...benchDatasets.map(d => d.data));
+  const priceExt = extent(allPriceValues);
   const axes = syncZeroAxes(impExt.min, impExt.max, priceExt.min, priceExt.max);
 
   if (chart) { chart.destroy(); chart = null; }
@@ -226,8 +362,8 @@ function renderChart() {
         },
         {
           type: "line",
-          label: "מחיר סיטונאי ($/mmbtu)",
-          data: prices,
+          label: `מחיר סיטונאי — ${country} ($/mmbtu)`,
+          data: countryPrice,
           borderColor: "#f87171",
           backgroundColor: "#f87171",
           borderWidth: 1.8,
@@ -237,6 +373,7 @@ function renderChart() {
           spanGaps: true,
           yAxisID: "y1",
         },
+        ...benchDatasets,
       ],
     },
     options: {
