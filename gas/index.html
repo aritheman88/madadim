@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Natural Gas // Imports &amp; Price Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Hebrew:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--surface:#161922;--border:#252a35;--text:#e2e8f0;--muted:#6b7585;--accent:#4ade80;--warn:#f59e0b;--danger:#f87171;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+.overlay.hidden{display:none;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px 36px;max-width:480px;width:90%;text-align:center;direction:rtl;}
+.modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
+.modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
+.modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
+.modal input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:.9rem;border-radius:4px;outline:none;margin-top:16px;text-align:center;}
+.modal input[type=password]:focus{border-color:var(--accent);}
+.modal .err{color:var(--danger);font-size:.75rem;font-family:'IBM Plex Mono',monospace;margin-top:8px;min-height:18px;}
+.modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
+.modal button:hover{opacity:.85;}
+.modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
+header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+.navlink{color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;}
+
+.layout{display:flex;flex-direction:column;flex:1;min-height:0;}
+
+.controls{padding:14px 24px;display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;border-bottom:1px solid var(--border);}
+.control-group{display:flex;flex-direction:column;gap:5px;}
+.control-group label{font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;}
+select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;border-radius:4px;outline:none;min-width:260px;}
+select:focus{border-color:var(--accent);}
+
+.status-bar{padding:5px 24px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--border);min-height:26px;display:flex;align-items:center;gap:10px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0;}
+.dot.loading{background:var(--warn);animation:pulse 1s infinite;}
+.dot.ok{background:var(--accent);}
+.dot.error{background:var(--danger);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.chart-wrap{flex:1;padding:20px 24px;min-height:0;position:relative;}
+canvas{width:100%!important;height:100%!important;}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="mobileOverlay">
+  <div class="modal">
+    <h2>⚠ שים לב</h2>
+    <p>האתר לא מותאם לשימוש במכשירים ניידים.</p>
+    <p>לחוויה מיטבית, יש לגשת מדפדפן שולחני.</p>
+    <button onclick="document.getElementById('mobileOverlay').classList.add('hidden')">המשך בכל זאת</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="disclaimerOverlay">
+  <div class="modal">
+    <h2>Gas // Imports &amp; Price Explorer</h2>
+    <p>אין להסתמך על הנתונים המופיעים באתר זה לצורך ביצוע עסקאות ו/או פעולות.</p>
+    <p>מטרת הנתונים היא להוות כלי עזר בלבד בצירוף עם נתונים או חישובים אחרים.</p>
+    <p>אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם או ייגרם כתוצאה מהסתמכות על הנתונים.</p>
+    <hr class="divider">
+    <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
+    <button onclick="showPassword()">הבנתי, המשך</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="passwordOverlay">
+  <div class="modal">
+    <h2>// גישה מוגבלת</h2>
+    <p>הזן סיסמה להמשך</p>
+    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="err" id="pwErr"></div>
+    <button onclick="checkPassword()">כניסה</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+  if(isMobile){
+    document.getElementById('mobileOverlay').classList.remove('hidden');
+    document.querySelector('#mobileOverlay button').addEventListener('click', function(){
+      document.getElementById('disclaimerOverlay').classList.remove('hidden');
+    });
+  } else {
+    document.getElementById('disclaimerOverlay').classList.remove('hidden');
+  }
+})();
+function showPassword(){
+  document.getElementById('disclaimerOverlay').classList.add('hidden');
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('pwInput').focus(),100);
+}
+function checkPassword(){
+  const val = document.getElementById('pwInput').value;
+  if(val === 'Lamas'){
+    document.getElementById('passwordOverlay').classList.add('hidden');
+  } else {
+    const err = document.getElementById('pwErr');
+    err.textContent = 'סיסמה שגויה';
+    document.getElementById('pwInput').value='';
+    setTimeout(()=>err.textContent='', 2000);
+  }
+}
+</script>
+
+<header>
+  <h1>Gas // Imports &amp; Price Explorer</h1>
+  <span class="beta-badge">BETA</span>
+  <p id="genDate">Natural gas imports (consumption − production) vs. wholesale price</p>
+  <a class="navlink" href="/" style="margin-right:auto;margin-left:8px;">← מדדי מחירים</a>
+  <a class="navlink" href="/change/">חישוב שינוי מחיר ▶</a>
+</header>
+
+<div class="layout">
+  <div class="controls">
+    <div class="control-group">
+      <label>מדינה</label>
+      <select id="countrySelect" onchange="renderChart()"></select>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">טוען...</span>
+  </div>
+
+  <div class="chart-wrap"><canvas id="myChart"></canvas></div>
+</div>
+
+<script>
+let GAS_DATA = null;
+let chart = null;
+
+function setStatus(state, msg) {
+  document.getElementById("dot").className = "dot " + state;
+  document.getElementById("statusText").textContent = msg;
+}
+
+async function init() {
+  setStatus("loading", "טוען נתוני גז...");
+  try {
+    const res = await fetch("gas_data.json");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    GAS_DATA = await res.json();
+  } catch (e) {
+    setStatus("error", `שגיאה בטעינת הנתונים: ${e.message}`);
+    return;
+  }
+
+  const countries = Object.keys(GAS_DATA.countries).sort((a, b) => a.localeCompare(b));
+  const select = document.getElementById("countrySelect");
+  select.innerHTML = countries.map(c => `<option value="${escAttr(c)}">${esc(c)}</option>`).join("");
+
+  const preferred = countries.includes("United Kingdom") ? "United Kingdom" : countries[0];
+  select.value = preferred;
+
+  setStatus("ok", `נטענו ${countries.length} מדינות · עודכן: ${GAS_DATA.generated}`);
+  renderChart();
+}
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escAttr(s){ return esc(s).replace(/"/g,"&quot;"); }
+
+// Compute min/max for two axes so that "0" sits at the same relative
+// height on both — avoids the misleading look of independently
+// auto-scaled dual axes.
+function syncZeroAxes(minA, maxA, minB, maxB, pad) {
+  pad = pad || 0.08;
+  function parts(mn, mx) {
+    let pos = Math.max(mx, 0);
+    let neg = Math.max(-mn, 0);
+    if (pos === 0 && neg === 0) pos = 1;
+    if (pos === 0) pos = neg * 0.05 || 1;
+    return { pos, neg };
+  }
+  const a = parts(minA, maxA);
+  const b = parts(minB, maxB);
+  const ratioA = a.neg / a.pos;
+  const ratioB = b.neg / b.pos;
+  const R = Math.max(ratioA, ratioB);
+  const topA = a.pos * (1 + pad);
+  const topB = b.pos * (1 + pad);
+  return { minA: -R * topA, maxA: topA, minB: -R * topB, maxB: topB };
+}
+
+function extent(values) {
+  const nums = values.filter(v => v !== null && v !== undefined && isFinite(v));
+  if (!nums.length) return { min: 0, max: 0 };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
+function renderChart() {
+  const country = document.getElementById("countrySelect").value;
+  const records = (GAS_DATA.countries[country] || []).slice();
+
+  const years = records.map(r => r.year);
+  const imports = records.map(r => r.imports);
+  const prices = records.map(r => r.price);
+
+  const impExt = extent(imports);
+  const priceExt = extent(prices);
+  const axes = syncZeroAxes(impExt.min, impExt.max, priceExt.min, priceExt.max);
+
+  if (chart) { chart.destroy(); chart = null; }
+
+  chart = new Chart(document.getElementById("myChart"), {
+    data: {
+      labels: years,
+      datasets: [
+        {
+          type: "bar",
+          label: "יבוא (צריכה − ייצור)",
+          data: imports,
+          backgroundColor: "#38bdf8aa",
+          borderColor: "#38bdf8",
+          borderWidth: 1,
+          yAxisID: "y",
+        },
+        {
+          type: "line",
+          label: "מחיר סיטונאי ($/mmbtu)",
+          data: prices,
+          borderColor: "#f87171",
+          backgroundColor: "#f87171",
+          borderWidth: 1.8,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0.15,
+          spanGaps: true,
+          yAxisID: "y1",
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        title: {
+          display: true,
+          text: `Natural gas imports and wholesale price — ${country}`,
+          color: "#e2e8f0",
+          font: { family: "'IBM Plex Mono',monospace", size: 13, weight: "600" },
+          padding: { bottom: 14 },
+        },
+        legend: { display: true, labels: { color: "#e2e8f0", font: { family: "'IBM Plex Mono',monospace", size: 10 }, boxWidth: 12, padding: 8 } },
+        tooltip: {
+          backgroundColor: "#161922", borderColor: "#252a35", borderWidth: 1,
+          titleColor: "#6b7585", bodyColor: "#e2e8f0",
+          titleFont: { family: "'IBM Plex Mono',monospace", size: 10 },
+          bodyFont: { family: "'IBM Plex Mono',monospace", size: 11 },
+          padding: 10,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v == null) return `${ctx.dataset.label}: N/A`;
+              return ctx.dataset.yAxisID === "y1"
+                ? `${ctx.dataset.label}: $${v.toFixed(2)}`
+                : `${ctx.dataset.label}: ${v.toFixed(1)}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: "#6b7585", font: { family: "'IBM Plex Mono',monospace", size: 10 }, maxRotation: 0 },
+          grid: { color: "#252a35" },
+        },
+        y: {
+          type: "linear", position: "left",
+          min: axes.minA, max: axes.maxA,
+          ticks: { color: "#38bdf8", font: { family: "'IBM Plex Mono',monospace", size: 10 } },
+          grid: { color: "#252a35" },
+          title: { display: true, text: "יבוא (צריכה − ייצור)", color: "#38bdf8", font: { family: "'IBM Plex Mono',monospace", size: 10 } },
+        },
+        y1: {
+          type: "linear", position: "right",
+          min: axes.minB, max: axes.maxB,
+          ticks: { color: "#f87171", font: { family: "'IBM Plex Mono',monospace", size: 10 } },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: "מחיר סיטונאי ($/mmbtu)", color: "#f87171", font: { family: "'IBM Plex Mono',monospace", size: 10 } },
+        },
+      },
+    },
+  });
+}
+
+init();
+</script>
+</body>
+</html>
