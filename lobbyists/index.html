@@ -62,6 +62,14 @@ header a.back{margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',m
 #network{width:100%;height:100%;}
 .empty-state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem;pointer-events:none;}
 
+.graph-loading{position:absolute;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:10;transition:opacity .25s;}
+.graph-loading.hidden{opacity:0;pointer-events:none;}
+.loading-box{text-align:center;font-family:'IBM Plex Mono',monospace;}
+.loading-box .msg{color:var(--muted);font-size:.8rem;margin-bottom:14px;}
+.loading-bar-track{width:260px;height:5px;background:var(--surface);border:1px solid var(--border);border-radius:3px;overflow:hidden;}
+.loading-bar-fill{height:100%;width:2%;background:var(--accent);transition:width .12s linear;}
+.loading-pct{color:var(--accent);font-size:.72rem;margin-top:10px;}
+
 .side::-webkit-scrollbar{width:6px;}
 .side::-webkit-scrollbar-track{background:var(--bg);}
 .side::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
@@ -170,6 +178,13 @@ function checkPassword(){
     <div class="graph-wrap">
       <div class="empty-state" id="emptyState"></div>
       <div id="network"></div>
+      <div class="graph-loading hidden" id="graphLoading">
+        <div class="loading-box">
+          <div class="msg">בונה את מפת הקשרים...</div>
+          <div class="loading-bar-track"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+          <div class="loading-pct" id="loadingPct">0%</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -308,11 +323,23 @@ function buildNodesEdges(edgeList){
   return { nodes, edgesOut };
 }
 
+function showGraphLoading(){
+  document.getElementById('loadingBarFill').style.width = '2%';
+  document.getElementById('loadingPct').textContent = '0%';
+  document.getElementById('graphLoading').classList.remove('hidden');
+}
+
+function hideGraphLoading(){
+  document.getElementById('graphLoading').classList.add('hidden');
+}
+
 function renderGraph(edgeList){
   const { nodes, edgesOut } = buildNodesEdges(edgeList);
 
   if(network){ network.destroy(); network = null; }
-  if(!nodes.length) return;
+  if(!nodes.length){ hideGraphLoading(); return; }
+
+  showGraphLoading();
 
   const container = document.getElementById('network');
   const data = {
@@ -322,16 +349,22 @@ function renderGraph(edgeList){
   const options = {
     physics: {
       barnesHut: { gravitationalConstant: -3000, centralGravity: 0.3, springLength: 120, springConstant: 0.02, damping: 0.5, avoidOverlap: 0 },
-      stabilization: { iterations: 1000 },
+      stabilization: { iterations: 600 },
     },
     interaction: { hover: true, tooltipDelay: 100 },
-    edges: { smooth: { enabled: true, type: 'dynamic' } },
+    edges: { smooth: false },
     nodes: { borderWidth: 1 },
   };
 
   network = new vis.Network(container, data, options);
+  network.on('stabilizationProgress', params => {
+    const pct = Math.round((params.iterations / params.total) * 100);
+    document.getElementById('loadingBarFill').style.width = pct + '%';
+    document.getElementById('loadingPct').textContent = pct + '%';
+  });
   network.once('stabilizationIterationsDone', () => {
     network.setOptions({ physics: false });
+    hideGraphLoading();
   });
   network.on('click', params => {
     if(params.nodes.length){
