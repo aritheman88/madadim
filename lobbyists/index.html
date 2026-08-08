@@ -149,9 +149,9 @@ function checkPassword(){
 <div class="layout">
   <div class="side">
     <div class="field">
-      <label>חיפוש — שם משרד/שדלן או לקוח</label>
+      <label>חיפוש — שם משרד, שדלן (כולל שדלנים במשרד) או לקוח</label>
       <input type="text" id="searchBox" placeholder="לדוגמה: קבינט, מד״א..." dir="rtl" oninput="onSearchInput()">
-      <div class="hint">מציג את הצמתים התואמים וכל הקשרים הישירים שלהם. שדה ריק מציג את המפה המלאה.</div>
+      <div class="hint">מציג את הצמתים התואמים וכל הקשרים הישירים שלהם. חיפוש שם שדלן פרטני יציג את המשרד בו הוא עובד. שדה ריק מציג את המפה המלאה.</div>
       <button class="clear-btn" onclick="clearSearch()">נקה חיפוש</button>
     </div>
 
@@ -245,7 +245,9 @@ function applyFilter(){
     edgesToShow = DATA.edges;
   } else {
     const matchedEntityIds = new Set(
-      DATA.entities.filter(e => e.name.includes(q)).map(e => e.id)
+      DATA.entities.filter(e =>
+        e.name.includes(q) || (e.lobbyists && e.lobbyists.some(l => l.includes(q)))
+      ).map(e => e.id)
     );
     const matchedClientNames = new Set(
       DATA.clients.filter(c => c.name.includes(q)).map(c => c.name)
@@ -286,7 +288,7 @@ function buildNodesEdges(edgeList){
       nodes.push({
         id: eId,
         label: ent.name,
-        title: `${ent.name}\n${ent.client_count} לקוחות\n${ent.is_independent ? 'שדלן עצמאי' : 'משרד/תאגיד'}`,
+        title: `${ent.name}\n${ent.client_count} לקוחות\n${ent.is_independent ? 'שדלן עצמאי' : 'משרד/תאגיד'}${!ent.is_independent && ent.lobbyists && ent.lobbyists.length ? '\nשדלנים: ' + ent.lobbyists.join(', ') : ''}`,
         color: ent.is_independent ? '#8E44AD' : '#4C9BE8',
         shape: 'dot',
         size: 10 + Math.min(ent.client_count, 40),
