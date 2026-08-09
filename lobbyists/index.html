@@ -2,7 +2,11 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Lobbyists // Network Explorer</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
@@ -22,29 +26,41 @@
 .modal button:hover{opacity:.85;}
 .modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
 .beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
-*{box-sizing:border-box;margin:0;padding:0;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{height:100%;overflow:hidden;}
-body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
-header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);}
+header{border-bottom:1px solid var(--border);padding:16px 28px;padding-top:calc(16px + env(safe-area-inset-top));display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
 header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
 header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
 header a.back{margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;}
+.menu-btn{display:none;margin-left:auto;order:99;background:var(--surface);border:1px solid var(--border);color:var(--accent);width:38px;height:38px;border-radius:4px;font-size:1.1rem;cursor:pointer;align-items:center;justify-content:center;}
 
-.layout{display:flex;flex:1;min-height:0;}
+.layout{display:flex;flex:1;min-height:0;position:relative;}
 
-.side{width:320px;min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;}
+.side{width:320px;min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;background:var(--bg);}
 .field label{display:block;font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
 .field input[type=text]{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;font-family:'IBM Plex Sans Hebrew',sans-serif;font-size:.88rem;border-radius:4px;outline:none;}
 .field input[type=text]:focus{border-color:var(--accent);}
 .field .hint{font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:6px;line-height:1.5;}
-.clear-btn{padding:6px 10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.7rem;margin-top:8px;}
+.clear-btn{padding:8px 10px;min-height:36px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.7rem;margin-top:8px;}
 .clear-btn:hover{color:var(--text);border-color:var(--muted);}
+.side-close{display:none;}
+
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:none;}
+.backdrop.show{display:block;}
+
+.node-detail{position:absolute;left:12px;right:12px;bottom:12px;max-height:45%;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;z-index:15;transform:translateY(130%);transition:transform .22s ease;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+.node-detail.show{transform:translateY(0);}
+.node-detail .ndClose{position:absolute;top:8px;left:8px;background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:6px;line-height:1;}
+.node-detail .ndTitle{font-family:'IBM Plex Sans Hebrew',sans-serif;font-size:.95rem;font-weight:600;color:var(--text);margin-bottom:8px;padding-left:24px;}
+.node-detail .ndRow{font-size:.78rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;}
+.node-detail .ndLobbyists{font-size:.8rem;color:var(--text);margin-top:8px;line-height:1.6;}
 
 .legend{display:flex;flex-direction:column;gap:8px;}
 .legend-item{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--text);}
 .legend-swatch{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0;}
 
-.xlsx-btn{padding:9px 16px;border-radius:4px;border:1px solid #22c55e;background:var(--surface);color:#22c55e;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.75rem;transition:all .2s;width:100%;}
+.xlsx-btn{padding:9px 16px;min-height:40px;border-radius:4px;border:1px solid #22c55e;background:var(--surface);color:#22c55e;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.75rem;transition:all .2s;width:100%;}
 .xlsx-btn:hover{background:#22c55e22;}
 .xlsx-btn:disabled{opacity:.3;cursor:not-allowed;}
 
@@ -73,18 +89,34 @@ header a.back{margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',m
 .side::-webkit-scrollbar{width:6px;}
 .side::-webkit-scrollbar-track{background:var(--bg);}
 .side::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+@media (max-width: 760px){
+  header{padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));gap:10px;}
+  header p{flex-basis:100%;order:3;}
+  header a.back{display:none;}
+  .menu-btn{display:flex;}
+
+  .side{
+    position:fixed;top:var(--header-h, 60px);bottom:0;right:0;
+    width:min(320px, 82vw);min-width:0;
+    border-left:1px solid var(--border);
+    box-shadow:-6px 0 24px rgba(0,0,0,.4);
+    transform:translateX(100%);transition:transform .22s ease;
+    z-index:45;padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  }
+  .side.open{transform:translateX(0);}
+
+  .field input[type=text]{font-size:16px;}
+  .side-close{display:block;margin-bottom:4px;}
+
+  .node-detail{left:8px;right:8px;bottom:8px;max-height:55%;}
+
+  .modal{padding:26px 22px;}
+  .modal input[type=password]{font-size:16px;}
+}
 </style>
 </head>
 <body>
-
-<div class="overlay" id="mobileOverlay">
-  <div class="modal">
-    <h2>⚠ שים לב</h2>
-    <p>האתר לא מותאם לשימוש במכשירים ניידים.</p>
-    <p>לחוויה מיטבית, יש לגשת מדפדפן שולחני.</p>
-    <button onclick="document.getElementById('mobileOverlay').classList.add('hidden')">המשך בכל זאת</button>
-  </div>
-</div>
 
 <div class="overlay hidden" id="disclaimerOverlay">
   <div class="modal">
@@ -109,18 +141,7 @@ header a.back{margin-left:auto;color:var(--accent);font-family:'IBM Plex Mono',m
 </div>
 
 <script>
-(function(){
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
-  if(isMobile){
-    document.getElementById('mobileOverlay').classList.remove('hidden');
-    document.querySelector('#mobileOverlay button').addEventListener('click', function(){
-      document.getElementById('disclaimerOverlay').classList.remove('hidden');
-    });
-  } else {
-    document.getElementById('mobileOverlay').classList.add('hidden');
-    document.getElementById('disclaimerOverlay').classList.remove('hidden');
-  }
-})();
+document.getElementById('disclaimerOverlay').classList.remove('hidden');
 function showPassword(){
   document.getElementById('disclaimerOverlay').classList.add('hidden');
   document.getElementById('passwordOverlay').classList.remove('hidden');
@@ -144,10 +165,13 @@ function checkPassword(){
   <span class="beta-badge">BETA</span>
   <p id="genDate">מפת קשרים בין שדלנים/משרדי לובינג ללקוחותיהם</p>
   <a class="back" href="/">◀ חזרה למדדים</a>
+  <button class="menu-btn" id="menuBtn" onclick="openSidebar()" aria-label="תפריט">☰</button>
 </header>
 
 <div class="layout">
-  <div class="side">
+  <div class="backdrop" id="backdrop" onclick="closeSidebar()"></div>
+  <div class="side" id="side">
+    <button class="clear-btn side-close" id="sideClose" onclick="closeSidebar()">✕ סגור</button>
     <div class="field">
       <label>חיפוש — שם משרד, שדלן (כולל שדלנים במשרד) או לקוח</label>
       <input type="text" id="searchBox" placeholder="לדוגמה: קבינט, מד״א..." dir="rtl" oninput="onSearchInput()">
@@ -185,6 +209,10 @@ function checkPassword(){
           <div class="loading-pct" id="loadingPct">0%</div>
         </div>
       </div>
+      <div class="node-detail" id="nodeDetail">
+        <button class="ndClose" onclick="closeNodeDetail()" aria-label="סגור">✕</button>
+        <div id="nodeDetailBody"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -196,10 +224,47 @@ let clientByName = new Map();
 let network = null;
 let currentEdges = [];
 let searchTimer = null;
+const isTouchViewport = () => window.matchMedia('(max-width: 760px)').matches;
 
 function setStatus(state, msg){
   document.getElementById('dot').className = 'dot ' + state;
   document.getElementById('statusText').textContent = msg;
+}
+
+function setHeaderHeightVar(){
+  document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
+}
+window.addEventListener('resize', setHeaderHeightVar);
+window.addEventListener('orientationchange', setHeaderHeightVar);
+setHeaderHeightVar();
+
+function openSidebar(){
+  document.getElementById('side').classList.add('open');
+  document.getElementById('backdrop').classList.add('show');
+}
+function closeSidebar(){
+  document.getElementById('side').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+}
+
+function closeNodeDetail(){
+  document.getElementById('nodeDetail').classList.remove('show');
+}
+function showNodeDetail(html){
+  document.getElementById('nodeDetailBody').innerHTML = html;
+  document.getElementById('nodeDetail').classList.add('show');
+}
+function entityDetailHtml(ent){
+  const lobbyistsHtml = (!ent.is_independent && ent.lobbyists && ent.lobbyists.length)
+    ? `<div class="ndLobbyists">שדלנים: ${esc(ent.lobbyists.join(', '))}</div>` : '';
+  return `<div class="ndTitle">${esc(ent.name)}</div>` +
+    `<div class="ndRow">${ent.client_count} לקוחות</div>` +
+    `<div class="ndRow">${ent.is_independent ? 'שדלן עצמאי' : 'משרד/תאגיד'}</div>` +
+    lobbyistsHtml;
+}
+function clientDetailHtml(name, cli){
+  return `<div class="ndTitle">${esc(name)}</div>` +
+    `<div class="ndRow">מיוצג ע״י ${cli.entity_count} ${cli.entity_count > 1 ? 'גופים' : 'גוף'}</div>`;
 }
 
 async function init(){
@@ -227,12 +292,14 @@ async function init(){
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function onSearchInput(){
+  closeNodeDetail();
   clearTimeout(searchTimer);
   searchTimer = setTimeout(applyFilter, 250);
 }
 
 function clearSearch(){
   document.getElementById('searchBox').value = '';
+  closeNodeDetail();
   applyFilter();
 }
 
@@ -351,9 +418,9 @@ function renderGraph(edgeList){
   const options = {
     physics: {
       barnesHut: { gravitationalConstant: -3000, centralGravity: 0.3, springLength: 120, springConstant: 0.02, damping: 0.5, avoidOverlap: 0 },
-      stabilization: { iterations: 600 },
+      stabilization: { iterations: isTouchViewport() ? 300 : 600 },
     },
-    interaction: { hover: true, tooltipDelay: 100 },
+    interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true },
     edges: { smooth: false },
     nodes: { borderWidth: 1 },
   };
@@ -370,9 +437,17 @@ function renderGraph(edgeList){
   });
   network.on('click', params => {
     if(params.nodes.length){
-      const node = data.nodes.get(params.nodes[0]);
+      const nodeId = params.nodes[0];
+      const node = data.nodes.get(nodeId);
+      if(nodeId.startsWith('E:')){
+        showNodeDetail(entityDetailHtml(entityById.get(nodeId.slice(2))));
+      } else {
+        showNodeDetail(clientDetailHtml(node.label, clientByName.get(node.label)));
+      }
       document.getElementById('searchBox').value = node.label;
       applyFilter();
+    } else {
+      closeNodeDetail();
     }
   });
 }
