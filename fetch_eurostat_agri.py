@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 Fetch Eurostat agricultural producer prices for raw commodities that HICP
-(prc_hicp_midx) does NOT cover — HICP only tracks retail/consumer purchase
-categories, so things Europe doesn't sell directly to consumers as such
-(Wheat, Soya/Soybeans, Maize, Barley) or that are better sourced at the farm
-gate (raw cow's milk) are missing from it entirely. Writes eurostat_agri.json
+(prc_hicp_midx / prc_hicp_minr) does NOT cover as an ongoing monthly series —
+things Europe doesn't sell directly to consumers as such (Wheat, Soya/
+Soybeans, Maize, Barley), that are better sourced at the farm gate (raw
+cow's milk), or whose only HICP series is permanently frozen with no live
+replacement (Rice — see fetch_eurostat_hicp_live.py's docstring). Writes
+eurostat_agri.json
 in the same {code, name, category, unit, data:[{date,value,pct,pct_year}]}
 shape as eurostat_hicp.json / pink_sheet.json so index.html can load it
 identically.
@@ -40,6 +42,7 @@ COMMODITIES = [
     ("apri_ap_crpouta", "prod_veg", "01500000", "Maize (corn)",     "EUR / 100 kg"),
     ("apri_ap_crpouta", "prod_veg", "01300000", "Barley",           "EUR / 100 kg"),
     ("apri_ap_crpouta", "prod_veg", "02130000", "Soya (soybeans)",  "EUR / 100 kg"),
+    ("apri_ap_crpouta", "prod_veg", "01600000", "Rice",             "EUR / 100 kg"),
     ("apri_ap_anouta",  "prod_ani", "12111000", "Raw cow's milk",   "EUR / 100 kg"),
 ]
 
@@ -64,10 +67,19 @@ def fetch_dataset_json(dataset, prod_dim, prod_code):
     print(f"Downloading {dataset} / {prod_code} ...", file=sys.stderr)
     resp = requests.get(url, timeout=180)
     resp.raise_for_status()
-    return resp.json()
+    js = resp.json()
+    # As of 2026-08, Eurostat's SDMX 2.1 dissemination API silently ignores
+    # these query-string filters and always returns the FULL unfiltered
+    # dataset (all products x all currencies). Detect that so parse_series()
+    # never has to assume a dimension was pre-filtered down to size 1.
+    prod_size = js["size"][js["id"].index(prod_dim)]
+    if prod_size != 1:
+        print(f"  NOTE: server ignored {prod_dim} filter (size={prod_size}); "
+              f"will select {prod_code} client-side.", file=sys.stderr)
+    return js
 
 
-def parse_series(js, geo_code):
+def parse_series(js, geo_code, prod_dim, prod_code):
     """Extract one geo's annual time series from a JSON-stat 2.0 payload."""
     dims = js["dimension"]
     dim_order = js["id"]  # e.g. ["freq","currency","prod_veg","geo","time"]
@@ -79,12 +91,22 @@ def parse_series(js, geo_code):
     time_cat = dims["time"]["category"]["index"]
     ordered_times = sorted(time_cat.keys(), key=lambda t: time_cat[t])
 
-    # Every non-time, non-geo dimension here has exactly one selected value
-    # (we queried a single prod code and currency=EUR), so its index is 0.
-    def dim_pos(name, idx):
-        coords = [0] * len(dim_order)
-        coords[dim_order.index("geo")] = idx
-        return coords
+    # Locate the actual index for every dimension instead of assuming the
+    # server applied our filters (it doesn't, as of 2026-08 — see
+    # fetch_dataset_json). geo/time vary per loop iteration below; every
+    # other dimension gets a single fixed index resolved here.
+    fixed_coord = [0] * len(dim_order)
+    prod_pos = dim_order.index(prod_dim)
+    prod_index = dims[prod_dim]["category"]["index"].get(prod_code)
+    if prod_index is None:
+        return None
+    fixed_coord[prod_pos] = prod_index
+    if "currency" in dim_order:
+        cur_pos = dim_order.index("currency")
+        cur_index = dims["currency"]["category"]["index"].get("EUR")
+        if cur_index is None:
+            return None
+        fixed_coord[cur_pos] = cur_index
 
     values = js["value"]
     strides = [1] * len(dim_order)
@@ -96,7 +118,7 @@ def parse_series(js, geo_code):
     time_pos = dim_order.index("time")
     geo_pos = dim_order.index("geo")
     for t_idx, year in enumerate(ordered_times):
-        coords = [0] * len(dim_order)
+        coords = list(fixed_coord)
         coords[geo_pos] = geo_index
         coords[time_pos] = t_idx
         flat = sum(c * s for c, s in zip(coords, strides))
@@ -124,15 +146,22 @@ def parse_series(js, geo_code):
 
 def main():
     series_out = []
+    dataset_cache = {}  # (dataset, prod_dim) -> js; server ignores the
+                         # product filter so one download covers every
+                         # commodity drawn from the same dataset.
     for dataset, prod_dim, prod_code, prod_name, unit in COMMODITIES:
-        try:
-            js = fetch_dataset_json(dataset, prod_dim, prod_code)
-        except requests.RequestException as e:
-            print(f"  FAILED {dataset}/{prod_code}: {e}", file=sys.stderr)
-            continue
+        cache_key = (dataset, prod_dim)
+        js = dataset_cache.get(cache_key)
+        if js is None:
+            try:
+                js = fetch_dataset_json(dataset, prod_dim, prod_code)
+            except requests.RequestException as e:
+                print(f"  FAILED {dataset}/{prod_code}: {e}", file=sys.stderr)
+                continue
+            dataset_cache[cache_key] = js
 
         for geo_code, geo_name in GEO.items():
-            rows = parse_series(js, geo_code)
+            rows = parse_series(js, geo_code, prod_dim, prod_code)
             if not rows:
                 continue
             # No underscore between AGRI and prod_code: index.html's badge regex

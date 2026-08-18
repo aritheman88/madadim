@@ -22,6 +22,10 @@ schema with zero real observations) on 2026-08-18:
   - Milk, Eggs, Sugar, Coffee, Tea: published with full country coverage,
     each at a similar granularity to before (though Coffee/Tea now bundle
     in "substitutes"/"maté & herbal infusions" respectively).
+  - Bread: published standalone (CP011131) with good country coverage
+    (~20-24 countries as of 2026-08), but Eurostat does NOT compute an
+    EU27_2020/EA aggregate for it specifically — only for the broader
+    "Bread and bakery products" (CP01113, includes cakes/pastries etc).
   - Chocolate and Cocoa: no longer separable — merged into one combined
     "Chocolate, cocoa and cocoa-based food products" index.
   - Butter: no longer separable — merged into "Butter and other oils/fats
@@ -61,6 +65,7 @@ PRODUCTS = {
     "TOTAL":    "All-items HICP",
     "CP011":    "Food",
     "CP01111":  "Cereals (rice, wheat, maize, barley, etc. — combined)",
+    "CP011131": "Bread",
     "CP0112":   "Meat",
     "CP0113":   "Fish and seafood",
     "CP0114":   "Milk, dairy products and eggs",

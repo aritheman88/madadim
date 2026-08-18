@@ -235,6 +235,16 @@ let chart       = null;
 let filtered    = [];
 
 // ── Catalog rendering ─────────────────────────────────────────────────────────
+// Word-boundary substring match: "rice" should find "Rice"/"rice flour" but not
+// match inside "Price"/"prices" (a plain .includes() would). Requires the query
+// to start where a new word starts (start of string, or preceded by a non-letter/
+// non-digit char) rather than matching anywhere mid-word.
+function matchesWord(text, q) {
+  if (!q) return true;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("(^|[^\\p{L}\\p{N}])" + escaped, "iu").test(text);
+}
+
 function filterCatalog() {
   // Freeze chart dimensions during catalog re-render
   const chartWrap = document.querySelector('.chart-wrap');
@@ -246,9 +256,9 @@ function filterCatalog() {
   const q = document.getElementById("searchBox").value.trim().toLowerCase();
   filtered = q
     ? CATALOG.filter(r =>
-        r.name.toLowerCase().includes(q) ||
-        r.code.includes(q) ||
-        r.subject.toLowerCase().includes(q))
+        matchesWord(r.name, q) ||
+        r.code.toLowerCase().includes(q) ||
+        matchesWord(r.subject, q))
     : CATALOG;
 
   const list = document.getElementById("catalogList");
