@@ -866,12 +866,45 @@ async function loadEurostatAgri() {
   }
 }
 
+// ── Eurostat HICP, live (2025=100, ECOICOP v2) ────────────────────────────────
+// prc_hicp_midx (loaded above via loadEurostatHicp/eurostat_hicp.json) was
+// discontinued by Eurostat as of the Jan-2026 HICP rebase and is permanently
+// frozen at 2025-12. This loads the live successor, prc_hicp_minr, built by
+// fetch_eurostat_hicp_live.py — kept as a SEPARATE series set (not spliced
+// onto the frozen one) because the new classification renumbers categories,
+// so matching codes don't necessarily mean matching products across the two
+// files. See fetch_eurostat_hicp_live.py's docstring for exactly which
+// products lost granularity in the rebase (Chocolate/Cocoa/Butter merged;
+// Rice/Wheat/Soya beans have no live monthly series at all).
+async function loadEurostatHicpLive() {
+  try {
+    const res = await fetch('eurostat_hicp_live.json');
+    if (!res.ok) return;
+    const el = await res.json();
+    el.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const elEntries = el.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'eurostat',
+    }));
+    CATALOG.push(...elEntries);
+    filterCatalog();
+    console.log(`[Eurostat HICP live] ${el.series.length} series loaded (updated ${el.updated})`);
+  } catch(e) {
+    console.warn('[Eurostat HICP live] Not available:', e.message);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 filterCatalog();
 loadPinkSheet();
 loadBoiRates();
 loadEurostatHicp();
 loadEurostatAgri();
+loadEurostatHicpLive();
 
 </script>
 </body>
