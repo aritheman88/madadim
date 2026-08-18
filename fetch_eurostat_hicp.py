@@ -25,12 +25,30 @@ TSV_URL = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/prc_hic
 
 # ECOICOP product codes worth indexing, mirroring EUROSTAT_PRODUCTS in index.html.
 # Extend this list as you find more categories you want comparators for.
+#
+# Verified against Eurostat's live COICOP codelist (ESTAT:COICOP(6.3), pulled from
+# the prc_hicp_midx DSD on 2026-08-18) — the 5-digit "CPxxxxx" codes below are the
+# finest leaf-level breakdown HICP actually publishes. Products the user asked for
+# that do NOT exist as HICP leaf codes (Wheat, Soybeans — HICP tracks retail/
+# consumer purchases, not raw commodities) are covered instead by
+# fetch_eurostat_agri.py against the apri_ap_crpouta/apri_ap_anouta producer-price
+# datasets. Rice, Coffee, Tea, and Cocoa DO exist as HICP leaf codes, so they stay
+# here (monthly, index-based — better resolution than the annual producer prices).
 PRODUCTS = {
     "CP00":    "All-items HICP",
     "CP011":   "Food",
+    "CP01111": "Rice",
+    "CP01141": "Fresh whole milk",
+    "CP01147": "Eggs",
+    "CP01151": "Butter",
+    "CP01153": "Olive oil",
+    "CP01174": "Potatoes",
     "CP01181": "Sugar",
     "CP01182": "Jams, marmalades and honey",
     "CP01183": "Chocolate",
+    "CP01211": "Coffee",
+    "CP01212": "Tea",
+    "CP01213": "Cocoa and powdered chocolate",
     "CP0112":  "Bread and cereals",
     "CP0113":  "Meat",
     "CP0114":  "Fish and seafood",

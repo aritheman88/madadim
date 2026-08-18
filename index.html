@@ -837,11 +837,41 @@ async function loadEurostatHicp() {
   }
 }
 
+// ── Eurostat agricultural producer prices (raw commodities, by country) ──────
+// Datasets: apri_ap_crpouta / apri_ap_anouta — "Selling prices of crop/animal
+// products", annual, absolute EUR/100kg (NOT an index like HICP). Covers
+// commodities HICP has no leaf code for at all (Wheat, Soya/Soybeans, Maize,
+// Barley, raw cow's milk) because HICP only tracks retail/consumer purchase
+// categories, not what farmers sell at the farm gate. Built by
+// fetch_eurostat_agri.py — same loading pattern as loadEurostatHicp() above.
+async function loadEurostatAgri() {
+  try {
+    const res = await fetch('eurostat_agri.json');
+    if (!res.ok) return;
+    const ea = await res.json();
+    ea.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const eaEntries = ea.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'eurostat',
+    }));
+    CATALOG.push(...eaEntries);
+    filterCatalog();
+    console.log(`[Eurostat Agri] ${ea.series.length} series loaded (updated ${ea.updated})`);
+  } catch(e) {
+    console.warn('[Eurostat Agri] Not available:', e.message);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 filterCatalog();
 loadPinkSheet();
 loadBoiRates();
 loadEurostatHicp();
+loadEurostatAgri();
 
 </script>
 </body>
