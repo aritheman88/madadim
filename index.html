@@ -279,6 +279,8 @@ function filterCatalog() {
       ? `<span style="background:#1b2d4e;border:1px solid #facc15;color:#facc15;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">${esc((r.code.match(/^EUROSTAT_[A-Z0-9]+_(.+)$/)?.[1] || '').slice(0,2))}</span>`
       : r.source === 'avgprice'
       ? `<span style="background:#1b3a2e;border:1px solid #22c55e;color:#4ade80;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">₪</span>`
+      : r.source === 'futures'
+      ? `<span style="background:#4e1b1b;border:1px solid #f87171;color:#fca5a5;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">FUT</span>`
       : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
       <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
@@ -488,7 +490,7 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_'));
+const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_') && !c.startsWith('FUT_'));
 
   if (!cbsCodes.length) {
     // All selected series are pre-loaded (World Bank / BOI)
@@ -507,7 +509,7 @@ const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_')
 
   let done = 0;
   for (const code of codes) {
-if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_')) { done++; continue; }
+if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_') || code.startsWith('FUT_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
@@ -722,6 +724,34 @@ async function loadPinkSheet() {
     console.log(`[Pink Sheet] ${ps.series.length} series loaded (updated ${ps.updated})`);
   } catch(e) {
     console.warn('[Pink Sheet] Not available:', e.message);
+  }
+}
+
+// ── Commodity futures (Yahoo Finance monthly settlement prices) ──────────────
+// Built by fetch_yahoo_futures.py — NOT scraped from investing.com (no public
+// API there, and its terms explicitly forbid automated data extraction). This
+// is exchange futures settlement data (forward market prices), one bar per
+// calendar month, which complements rather than replaces the Pink Sheet's
+// physical trade prices above.
+async function loadFutures() {
+  try {
+    const res = await fetch('futures.json');
+    if (!res.ok) return;
+    const fut = await res.json();
+    fut.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const futEntries = fut.series.map(s => ({
+      code:    s.code,
+      name:    `${s.name} (futures)`,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'futures',
+    }));
+    CATALOG.push(...futEntries);
+    filterCatalog();
+    console.log(`[Futures] ${fut.series.length} series loaded (updated ${fut.updated})`);
+  } catch(e) {
+    console.warn('[Futures] Not available:', e.message);
   }
 }
 
@@ -947,6 +977,7 @@ async function loadCbsAvgPrices() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 filterCatalog();
 loadPinkSheet();
+loadFutures();
 loadBoiRates();
 loadEurostatHicp();
 loadEurostatAgri();
