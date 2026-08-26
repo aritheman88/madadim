@@ -197,6 +197,7 @@ function checkPassword(){
           <button class="mode-btn"        onclick="setMode('index',this)">ערך</button>
           <button class="mode-btn"        onclick="setMode('pct',this)">% שנתי</button>
           <button class="mode-btn active" onclick="setMode('base',this)">% מבסיס</button>
+          <button class="mode-btn"        onclick="setMode('raw',this)">מחיר גולמי</button>
         </div>
       </div>
       <button class="fetch-btn" id="fetchBtn" onclick="fetchSelected()">טען נתונים ▶</button>
@@ -276,6 +277,8 @@ function filterCatalog() {
       ? `<span style="background:#2d1b4e;border:1px solid #a855f7;color:#c084fc;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">BOI</span>`
       : r.source === 'eurostat'
       ? `<span style="background:#1b2d4e;border:1px solid #facc15;color:#facc15;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">${esc((r.code.match(/^EUROSTAT_[A-Z0-9]+_(.+)$/)?.[1] || '').slice(0,2))}</span>`
+      : r.source === 'avgprice'
+      ? `<span style="background:#1b3a2e;border:1px solid #22c55e;color:#4ade80;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">₪</span>`
       : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
       <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
@@ -485,7 +488,7 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_'));
+const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_'));
 
   if (!cbsCodes.length) {
     // All selected series are pre-loaded (World Bank / BOI)
@@ -504,7 +507,7 @@ const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_')
 
   let done = 0;
   for (const code of codes) {
-if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_')) { done++; continue; }
+if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
@@ -532,7 +535,7 @@ function filtered_data(rows) {
 function buildSeries(rows) {
   const r = filtered_data(rows);
   if (!r.length) return [];
-  if (mode === "index") return r.map(x => ({ x: new Date(x.date+"-01"), y: x.value }));
+  if (mode === "index" || mode === "raw") return r.map(x => ({ x: new Date(x.date+"-01"), y: x.value }));
   if (mode === "pct")   return r.map(x => ({ x: new Date(x.date+"-01"), y: x.pct_year }));
   if (mode === "base") {
     const base = r[0].value;
@@ -556,7 +559,7 @@ function updateChart() {
     fill:             false,
   }));
 
-  const yLabel = mode==="index" ? "ערך מדד (בסיס 2010=100)" : mode==="pct" ? "% שינוי שנתי" : "% מבסיס";
+  const yLabel = mode==="index" ? "ערך מדד (בסיס 2010=100)" : mode==="pct" ? "% שינוי שנתי" : mode==="raw" ? "מחיר ממוצע (₪)" : "% מבסיס";
 
   if (chart) {
     chart.destroy();
@@ -579,7 +582,8 @@ function updateChart() {
           padding:10,
           callbacks:{label:ctx=>{
             const v=ctx.parsed.y;
-            return v==null?`${ctx.dataset.label}: N/A`:`${ctx.dataset.label}: ${v.toFixed(2)}${mode==="index"?"":"%"}`;
+            const suffix = mode==="index" ? "" : mode==="raw" ? " ₪" : "%";
+            return v==null?`${ctx.dataset.label}: N/A`:`${ctx.dataset.label}: ${v.toFixed(2)}${suffix}`;
           }}
         }
       },
@@ -908,6 +912,38 @@ async function loadEurostatHicpLive() {
   }
 }
 
+// ── CBS average consumer prices (raw ₪, NOT an index) ─────────────────────────
+// Table 5.6 — "Average National Consumer Prices of Selected Products and
+// Services" (מחירים ממוצעים ארציים לצרכן על מוצרים ושירותים נבחרים). CBS
+// publishes this only as a PDF attached to the monthly CPI release — there is
+// no REST endpoint for it (unlike every other series here) — so it's built by
+// fetch_cbs_avg_prices.py, which parses that PDF into cbs_avg_prices.json in
+// the same {code, name, category, unit, data} shape the other loaders use.
+// Values are absolute retail prices in current NIS (e.g. olive oil 750ml ->
+// ~35 ILS), so they use the dedicated "raw" display mode (see setMode/
+// buildSeries above) instead of being read as an index number.
+async function loadCbsAvgPrices() {
+  try {
+    const res = await fetch('cbs_avg_prices.json');
+    if (!res.ok) return;
+    const ap = await res.json();
+    ap.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const apEntries = ap.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'avgprice',
+    }));
+    CATALOG.push(...apEntries);
+    filterCatalog();
+    console.log(`[CBS Avg Prices] ${ap.series.length} series loaded (updated ${ap.updated})`);
+  } catch(e) {
+    console.warn('[CBS Avg Prices] Not available:', e.message);
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 filterCatalog();
 loadPinkSheet();
@@ -915,6 +951,7 @@ loadBoiRates();
 loadEurostatHicp();
 loadEurostatAgri();
 loadEurostatHicpLive();
+loadCbsAvgPrices();
 
 </script>
 </body>
