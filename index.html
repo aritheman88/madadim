@@ -281,6 +281,8 @@ function filterCatalog() {
       ? `<span style="background:#1b3a2e;border:1px solid #22c55e;color:#4ade80;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">₪</span>`
       : r.source === 'futures'
       ? `<span style="background:#4e1b1b;border:1px solid #f87171;color:#fca5a5;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">FUT</span>`
+      : r.source === 'usda'
+      ? `<span style="background:#1b3a4e;border:1px solid #38bdf8;color:#7dd3fc;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">USDA</span>`
       : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
       <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
@@ -490,7 +492,7 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_') && !c.startsWith('FUT_'));
+const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_') && !c.startsWith('FUT_') && !c.startsWith('USDA_'));
 
   if (!cbsCodes.length) {
     // All selected series are pre-loaded (World Bank / BOI)
@@ -509,7 +511,7 @@ const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_')
 
   let done = 0;
   for (const code of codes) {
-if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_') || code.startsWith('FUT_')) { done++; continue; }
+if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_') || code.startsWith('FUT_') || code.startsWith('USDA_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
@@ -755,6 +757,33 @@ async function loadFutures() {
   }
 }
 
+// ── USDA MARS dairy (Point of Sale reports) ───────────────────────────────────
+// Built by fetch_usda_dairy.py. USDA MARS's dairy point-of-sale reports are the
+// only category found to return structured numeric prices via the public API
+// (egg/poultry/cotton/grain reports there are narrative-text bulletins with no
+// extractable numbers, so they're not included).
+async function loadUsdaDairy() {
+  try {
+    const res = await fetch('usda_dairy.json');
+    if (!res.ok) return;
+    const usda = await res.json();
+    usda.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const usdaEntries = usda.series.map(s => ({
+      code:    s.code,
+      name:    `${s.name} (USDA)`,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'usda',
+    }));
+    CATALOG.push(...usdaEntries);
+    filterCatalog();
+    console.log(`[USDA Dairy] ${usda.series.length} series loaded (updated ${usda.updated})`);
+  } catch(e) {
+    console.warn('[USDA Dairy] Not available:', e.message);
+  }
+}
+
 // ── Bank of Israel exchange rates ─────────────────────────────────────────────
 const BOI_SERIES = [
   { code: "BOI_USD_ILS", name: "USD / NIS", from: "1948-05" },
@@ -978,6 +1007,7 @@ async function loadCbsAvgPrices() {
 filterCatalog();
 loadPinkSheet();
 loadFutures();
+loadUsdaDairy();
 loadBoiRates();
 loadEurostatHicp();
 loadEurostatAgri();
