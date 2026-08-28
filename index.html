@@ -283,6 +283,8 @@ function filterCatalog() {
       ? `<span style="background:#4e1b1b;border:1px solid #f87171;color:#fca5a5;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">FUT</span>`
       : r.source === 'usda'
       ? `<span style="background:#1b3a4e;border:1px solid #38bdf8;color:#7dd3fc;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">USDA</span>`
+      : r.source === 'bls'
+      ? `<span style="background:#3a1b4e;border:1px solid #c084fc;color:#e9d5ff;font-size:.6rem;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;margin-left:5px;vertical-align:middle;">CPI</span>`
       : '';
     return `<div class="cat-item ${sel}" style="${border}" onclick="toggleIndex('${r.code}','${esc(r.name)}')">
       <div class="item-name">${hl(r.name, document.getElementById("searchBox").value)}${srcBadge}</div>
@@ -492,7 +494,7 @@ async function fetchSelected() {
   const codes    = Object.keys(selectedMap);
   if (!codes.length) { setStatus("","בחר מדד אחד לפחות"); return; }
 
-const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_') && !c.startsWith('FUT_') && !c.startsWith('USDA_'));
+const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_') && !c.startsWith('EUROSTAT_') && !c.startsWith('CBSAVG_') && !c.startsWith('FUT_') && !c.startsWith('USDA_') && !c.startsWith('BLS_'));
 
   if (!cbsCodes.length) {
     // All selected series are pre-loaded (World Bank / BOI)
@@ -511,7 +513,7 @@ const cbsCodes = codes.filter(c => !c.startsWith('WB_') && !c.startsWith('BOI_')
 
   let done = 0;
   for (const code of codes) {
-if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_') || code.startsWith('FUT_') || code.startsWith('USDA_')) { done++; continue; }
+if (code.startsWith('WB_') || code.startsWith('BOI_') || code.startsWith('EUROSTAT_') || code.startsWith('CBSAVG_') || code.startsWith('FUT_') || code.startsWith('USDA_') || code.startsWith('BLS_')) { done++; continue; }
     setStatus("loading", `טוען ${selectedMap[code].name} (${code})... [${done+1}/${codes.length}]`);
     try {
       selectedMap[code].data = await fetchIndex(code, fromYm, toYm);
@@ -784,6 +786,35 @@ async function loadUsdaDairy() {
   }
 }
 
+// ── BLS CPI-U food items (US retail consumer prices) ──────────────────────────
+// Built by fetch_bls_food_cpi.py. Same underlying government data as paid
+// resellers like economy.com show (e.g. "CPI Urban Consumer Butter and
+// Margarine") -- pulled directly from BLS's own free public API instead.
+// Unlike the other sources on this page (wholesale/export/futures prices),
+// this is retail consumer price *indices*, same category as the CBS data the
+// rest of the site is built around, just for the US.
+async function loadBlsFoodCpi() {
+  try {
+    const res = await fetch('bls_food_cpi.json');
+    if (!res.ok) return;
+    const bls = await res.json();
+    bls.series.forEach(s => { WB_DATA[s.code] = s.data; });
+    const blsEntries = bls.series.map(s => ({
+      code:    s.code,
+      name:    s.name,
+      from:    s.data[0]?.date  || '',
+      to:      s.data[s.data.length - 1]?.date || '',
+      subject: `${s.category} · ${s.unit}`,
+      source:  'bls',
+    }));
+    CATALOG.push(...blsEntries);
+    filterCatalog();
+    console.log(`[BLS CPI] ${bls.series.length} series loaded (updated ${bls.updated})`);
+  } catch(e) {
+    console.warn('[BLS CPI] Not available:', e.message);
+  }
+}
+
 // ── Bank of Israel exchange rates ─────────────────────────────────────────────
 const BOI_SERIES = [
   { code: "BOI_USD_ILS", name: "USD / NIS", from: "1948-05" },
@@ -1008,6 +1039,7 @@ filterCatalog();
 loadPinkSheet();
 loadFutures();
 loadUsdaDairy();
+loadBlsFoodCpi();
 loadBoiRates();
 loadEurostatHicp();
 loadEurostatAgri();
