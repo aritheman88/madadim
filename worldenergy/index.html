@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorldEnergy // OWID Energy Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Hebrew:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--surface:#161922;--border:#252a35;--text:#e2e8f0;--muted:#6b7585;--accent:#4ade80;--warn:#f59e0b;--danger:#f87171;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+.overlay.hidden{display:none;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px 36px;max-width:480px;width:90%;text-align:center;direction:rtl;}
+.modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
+.modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
+.modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
+.modal input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:.9rem;border-radius:4px;outline:none;margin-top:16px;text-align:center;}
+.modal input[type=password]:focus{border-color:var(--accent);}
+.modal .err{color:var(--danger);font-size:.75rem;font-family:'IBM Plex Mono',monospace;margin-top:8px;min-height:18px;}
+.modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
+.modal button:hover{opacity:.85;}
+.modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
+header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+.navlink{color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;}
+
+.layout{display:flex;flex-direction:column;flex:1;min-height:0;}
+
+.controls{padding:14px 24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;border-bottom:1px solid var(--border);}
+.control-group{display:flex;flex-direction:column;gap:5px;}
+.control-group label{font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;}
+select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:.82rem;border-radius:4px;outline:none;min-width:220px;max-width:340px;}
+select:focus{border-color:var(--accent);}
+input[type=number]{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;border-radius:4px;outline:none;width:82px;text-align:center;}
+input[type=number]:focus{border-color:var(--accent);}
+.year-range{display:flex;align-items:center;gap:8px;}
+.year-range .sep{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.8rem;}
+
+.mode-group,.unit-group{display:flex;gap:0;}
+.mode-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:8px 14px;font-family:'IBM Plex Mono',monospace;font-size:.76rem;cursor:pointer;}
+.mode-btn:first-child{border-radius:4px 0 0 4px;}
+.mode-btn:last-child{border-radius:0 4px 4px 0;}
+.mode-group[dir]{}
+.mode-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600;}
+.unit-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:8px 12px;font-family:'IBM Plex Mono',monospace;font-size:.76rem;cursor:pointer;}
+.unit-btn:first-child{border-radius:4px 0 0 4px;}
+.unit-btn:last-child{border-radius:0 4px 4px 0;}
+.unit-btn.active{background:#334155;color:var(--text);border-color:#475569;}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-width:520px;}
+.chip{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px 6px 3px 10px;font-family:'IBM Plex Mono',monospace;font-size:.72rem;}
+.chip .sw{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;line-height:1;padding:0 2px;}
+.chip button:hover{color:var(--danger);}
+
+.xlsx-btn{padding:8px 14px;border-radius:4px;border:1px solid #22c55e;background:var(--surface);color:#22c55e;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.72rem;}
+.xlsx-btn:hover{background:#22c55e22;}
+.xlsx-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+.status-bar{padding:5px 24px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--border);min-height:26px;display:flex;align-items:center;gap:10px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0;}
+.dot.loading{background:var(--warn);animation:pulse 1s infinite;}
+.dot.ok{background:var(--accent);}
+.dot.error{background:var(--danger);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.chart-wrap{flex:1;padding:18px 24px;min-height:0;position:relative;}
+canvas{width:100%!important;height:100%!important;}
+.empty-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.85rem;text-align:center;padding:0 20px;}
+.empty-msg.hidden{display:none;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="mobileOverlay">
+  <div class="modal">
+    <h2>⚠ שים לב</h2>
+    <p>האתר לא מותאם לשימוש במכשירים ניידים.</p>
+    <p>לחוויה מיטבית, יש לגשת מדפדפן שולחני.</p>
+    <button onclick="document.getElementById('mobileOverlay').classList.add('hidden')">המשך בכל זאת</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="disclaimerOverlay">
+  <div class="modal">
+    <h2>WorldEnergy // OWID Energy Explorer</h2>
+    <p>אין להסתמך על הנתונים המופיעים באתר זה לצורך ביצוע עסקאות ו/או פעולות.</p>
+    <p>מטרת הנתונים היא להוות כלי עזר בלבד בצירוף עם נתונים או חישובים אחרים.</p>
+    <p>אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם או ייגרם כתוצאה מהסתמכות על הנתונים.</p>
+    <hr class="divider">
+    <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
+    <button onclick="showPassword()">הבנתי, המשך</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="passwordOverlay">
+  <div class="modal">
+    <h2>// גישה מוגבלת</h2>
+    <p>הזן סיסמה להמשך</p>
+    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkPassword()">
+    <div class="err" id="pwErr"></div>
+    <button onclick="checkPassword()">כניסה</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth < 768;
+  if(isMobile){
+    document.getElementById('mobileOverlay').classList.remove('hidden');
+    document.querySelector('#mobileOverlay button').addEventListener('click', function(){
+      document.getElementById('disclaimerOverlay').classList.remove('hidden');
+    });
+  } else {
+    document.getElementById('disclaimerOverlay').classList.remove('hidden');
+  }
+})();
+function showPassword(){
+  document.getElementById('disclaimerOverlay').classList.add('hidden');
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('pwInput').focus(),100);
+}
+function checkPassword(){
+  const val = document.getElementById('pwInput').value;
+  if(val === 'Lamas'){
+    document.getElementById('passwordOverlay').classList.add('hidden');
+  } else {
+    const err = document.getElementById('pwErr');
+    err.textContent = 'סיסמה שגויה';
+    document.getElementById('pwInput').value='';
+    setTimeout(()=>err.textContent='', 2000);
+  }
+}
+</script>
+
+<header>
+  <h1>WorldEnergy // OWID Energy Explorer</h1>
+  <span class="beta-badge">BETA</span>
+  <p id="genDate">Our World in Data · energy mix, electricity mix &amp; cross-country comparison</p>
+  <a class="navlink" href="/" style="margin-right:auto;margin-left:8px;">← מדדי מחירים</a>
+  <a class="navlink" href="/gas/">גז ▶</a>
+  <a class="navlink" href="/change/">חישוב שינוי מחיר ▶</a>
+</header>
+
+<div class="layout">
+  <div class="controls">
+    <div class="control-group">
+      <label>תצוגה</label>
+      <div class="mode-group">
+        <button class="mode-btn active" data-mode="mixEnergy" onclick="setMode('mixEnergy')">תמהיל אנרגיה</button>
+        <button class="mode-btn" data-mode="mixElec" onclick="setMode('mixElec')">תמהיל חשמל</button>
+        <button class="mode-btn" data-mode="compare" onclick="setMode('compare')">השוואה</button>
+      </div>
+    </div>
+
+    <!-- MIX modes: single entity + unit toggle -->
+    <div class="control-group" id="grpMixEntity">
+      <label>מדינה / אזור</label>
+      <select id="mixEntity" onchange="render()"></select>
+    </div>
+    <div class="control-group hidden" id="grpUnit">
+      <label>יחידות</label>
+      <div class="unit-group">
+        <button class="unit-btn active" data-unit="twh" onclick="setUnit('twh')">TWh</button>
+        <button class="unit-btn" data-unit="share" onclick="setUnit('share')">% תמהיל</button>
+      </div>
+    </div>
+
+    <!-- COMPARE mode: metric + entity picker + chips -->
+    <div class="control-group hidden" id="grpMetric">
+      <label>מדד</label>
+      <select id="metricSel" onchange="render()"></select>
+    </div>
+    <div class="control-group hidden" id="grpAddEntity">
+      <label>הוסף מדינה / אזור (עד 8)</label>
+      <select id="addEntity" onchange="addEntity(this.value)"></select>
+    </div>
+    <div class="control-group hidden" id="grpChips">
+      <label>נבחרו</label>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="control-group">
+      <label>טווח שנים</label>
+      <div class="year-range">
+        <input type="number" id="fromYear" onchange="onYearRangeChange()">
+        <span class="sep">→</span>
+        <input type="number" id="toYear" onchange="onYearRangeChange()">
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>&nbsp;</label>
+      <button class="xlsx-btn" id="xlsxBtn" onclick="downloadXlsx()" disabled>⬇ XLSX</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">טוען...</span>
+  </div>
+
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+    <div class="empty-msg hidden" id="emptyMsg"></div>
+  </div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────
+let DB = null;
+let chart = null;
+let MODE = "mixEnergy";       // mixEnergy | mixElec | compare
+let UNIT = "twh";             // twh | share  (mix modes only)
+let compareEntities = [];     // for compare mode
+let ALL_COUNTRIES = [], ALL_AGGS = [], CAP = {};
+const COMPARE_COLORS = ["#4ade80","#f87171","#60a5fa","#fbbf24","#c084fc","#34d399","#fb923c","#f472b6"];
+const MAX_COMPARE = 8;
+
+function entityOptgroups(countries, aggs){
+  return `<optgroup label="מדינות">${countries.map(c=>`<option value="${escAttr(c)}">${esc(c)}</option>`).join("")}</optgroup>` +
+         `<optgroup label="אזורים / קבוצות">${aggs.map(c=>`<option value="${escAttr(c)}">${esc(c)}</option>`).join("")}</optgroup>`;
+}
+// Rebuild the mix-mode entity picker with only entities that carry the
+// current view, keeping the current selection if it survives.
+function populateMixEntity(){
+  const key = MODE;   // "mixEnergy" | "mixElec"
+  const prev = document.getElementById("mixEntity").value;
+  const cs = ALL_COUNTRIES.filter(n => CAP[n][key]);
+  const as = ALL_AGGS.filter(n => CAP[n][key]);
+  const sel = document.getElementById("mixEntity");
+  sel.innerHTML = entityOptgroups(cs, as);
+  sel.value = [prev, "Israel", cs[0], as[0]].find(n => n && CAP[n] && CAP[n][key]) || cs[0] || as[0];
+}
+
+function setStatus(state, msg){
+  document.getElementById("dot").className = "dot " + state;
+  document.getElementById("statusText").textContent = msg;
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function escAttr(s){ return esc(s).replace(/"/g,"&quot;"); }
+
+// ── Load ─────────────────────────────────────────────────────────────────
+async function init(){
+  setStatus("loading","טוען נתוני אנרגיה...");
+  try{
+    const res = await fetch("energy_data.json");
+    if(!res.ok) throw new Error("energy_data.json HTTP " + res.status);
+    DB = await res.json();
+  }catch(e){
+    setStatus("error","שגיאה בטעינת הנתונים: " + e.message);
+    return;
+  }
+
+  const names = Object.keys(DB.entities);
+  ALL_COUNTRIES = names.filter(n => !DB.entities[n].aggregate).sort((a,b)=>a.localeCompare(b));
+  ALL_AGGS = names.filter(n => DB.entities[n].aggregate).sort((a,b)=>a.localeCompare(b));
+  const countries = ALL_COUNTRIES, aggs = ALL_AGGS;
+
+  // Not every entity carries every view. The Energy Institute fuel-by-fuel
+  // breakdown covers ~80 countries (gate: fossil_fuel_consumption); Ember's
+  // electricity generation covers ~215 (gate: electricity_generation).
+  const hasSeries = (n,c) => { const s = DB.entities[n].series[c]; return !!s && s.some(v => v != null); };
+  CAP = {};
+  names.forEach(n => { CAP[n] = {
+    mixEnergy: hasSeries(n, "fossil_fuel_consumption"),
+    mixElec:   hasSeries(n, "electricity_generation"),
+  }; });
+
+  document.getElementById("addEntity").innerHTML =
+    `<option value="">— בחר —</option>` + entityOptgroups(countries, aggs);
+
+  // metric dropdown from metric_groups
+  document.getElementById("metricSel").innerHTML = DB.metric_groups.map(g =>
+    `<optgroup label="${escAttr(g.label)}">` +
+    g.cols.map(c => `<option value="${escAttr(c)}">${esc(DB.labels[c] || c)} (${esc(DB.units[c]||"")})</option>`).join("") +
+    `</optgroup>`
+  ).join("");
+  document.getElementById("metricSel").value = "renewables_share_elec";
+
+  compareEntities = ["Israel","World"].filter(n => DB.entities[n]);
+
+  setStatus("ok", `נטענו ${countries.length} מדינות · ${aggs.length} אזורים/קבוצות · עודכן: ${DB.generated} · מקור: OWID`);
+  document.getElementById("genDate").textContent =
+    `Our World in Data — energy dataset · דרך ${DB.year_min}–${DB.latest_year}`;
+
+  setMode("mixEnergy");
+}
+
+// ── Mode / unit switching ───────────────────────────────────────────────
+function setMode(m){
+  MODE = m;
+  document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === m));
+  const isMix = (m === "mixEnergy" || m === "mixElec");
+  document.getElementById("grpMixEntity").classList.toggle("hidden", !isMix);
+  document.getElementById("grpUnit").classList.toggle("hidden", !isMix);
+  document.getElementById("grpMetric").classList.toggle("hidden", isMix);
+  document.getElementById("grpAddEntity").classList.toggle("hidden", isMix);
+  document.getElementById("grpChips").classList.toggle("hidden", isMix);
+  if(isMix) populateMixEntity();
+  resetYearBounds();
+  if(!isMix) renderChips();
+  render();
+}
+function setUnit(u){
+  UNIT = u;
+  document.querySelectorAll(".unit-btn").forEach(b => b.classList.toggle("active", b.dataset.unit === u));
+  render();
+}
+
+// ── Entity chips (compare mode) ─────────────────────────────────────────
+function addEntity(name){
+  if(!name) return;
+  document.getElementById("addEntity").value = "";
+  if(compareEntities.includes(name) || compareEntities.length >= MAX_COMPARE) return;
+  compareEntities.push(name);
+  resetYearBounds();
+  renderChips();
+  render();
+}
+function removeEntity(name){
+  compareEntities = compareEntities.filter(n => n !== name);
+  resetYearBounds();
+  renderChips();
+  render();
+}
+function renderChips(){
+  document.getElementById("chips").innerHTML = compareEntities.map((n,i) =>
+    `<span class="chip"><span class="sw" style="background:${COMPARE_COLORS[i % COMPARE_COLORS.length]}"></span>${esc(n)}` +
+    `<button onclick="removeEntity('${escAttr(n).replace(/'/g,"\\'")}')" title="הסר">×</button></span>`
+  ).join("");
+}
+
+// ── Year-range bounds ──────────────────────────────────────────────────
+function activeEntities(){
+  if(MODE === "compare") return compareEntities;
+  return [document.getElementById("mixEntity").value];
+}
+function yearExtentFor(names){
+  let lo = Infinity, hi = -Infinity;
+  names.forEach(n => {
+    const e = DB.entities[n];
+    if(!e || !e.years.length) return;
+    lo = Math.min(lo, e.years[0]);
+    hi = Math.max(hi, e.years[e.years.length - 1]);
+  });
+  if(!isFinite(lo)) return [DB.year_min, DB.latest_year];
+  return [lo, hi];
+}
+function resetYearBounds(){
+  const [lo, hi] = yearExtentFor(activeEntities());
+  const f = document.getElementById("fromYear"), t = document.getElementById("toYear");
+  f.min = t.min = lo; f.max = t.max = hi;
+  f.value = Math.max(lo, MODE === "compare" ? Math.max(lo, 1985) : lo);
+  t.value = hi;
+}
+function onYearRangeChange(){
+  const f = document.getElementById("fromYear"), t = document.getElementById("toYear");
+  let a = parseInt(f.value,10), b = parseInt(t.value,10);
+  if(a > b){ [a,b] = [b,a]; }
+  f.value = a; t.value = b;
+  render();
+}
+
+// ── Series lookup helpers ─────────────────────────────────────────────
+function valAt(entity, col, year){
+  const e = DB.entities[entity];
+  if(!e || !e.series[col]) return null;
+  const idx = e.years.indexOf(year);
+  return idx < 0 ? null : e.series[col][idx];
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function render(){
+  if(!DB) return;
+  const from = parseInt(document.getElementById("fromYear").value,10);
+  const to = parseInt(document.getElementById("toYear").value,10);
+  const years = [];
+  for(let y = from; y <= to; y++) years.push(y);
+
+  if(MODE === "compare") renderCompare(years);
+  else renderMix(years);
+}
+
+function showEmpty(msg){
+  const el = document.getElementById("emptyMsg");
+  el.textContent = msg;
+  el.classList.toggle("hidden", !msg);
+  document.getElementById("chart").style.visibility = msg ? "hidden" : "visible";
+  document.getElementById("xlsxBtn").disabled = !!msg;
+}
+
+function renderMix(years){
+  const entity = document.getElementById("mixEntity").value;
+  const isElec = (MODE === "mixElec");
+  const colKey = isElec ? (UNIT === "share" ? "share_elec" : "twh_elec")
+                        : (UNIT === "share" ? "share_energy" : "twh_energy");
+
+  // Gate: only entities whose fuel-by-fuel breakdown actually exists. Without
+  // this, a country with just a headline number plus OWID's zero-filled
+  // nuclear/biofuel columns would render a misleading near-empty stack.
+  const gateOk = isElec ? CAP[entity].mixElec : CAP[entity].mixEnergy;
+  const present = !gateOk ? [] : DB.fuels.filter(f => {
+    const e = DB.entities[entity];
+    return e && e.series[f[colKey]] && e.series[f[colKey]].some(v => v != null);
+  });
+  // keep only years in range that actually carry mix data for this entity,
+  // so the stack doesn't cliff to zero over the trailing/leading empty years
+  const mixYears = years.filter(y =>
+    present.some(f => valAt(entity, f[colKey], y) != null)
+  );
+  if(!present.length || !mixYears.length){
+    showEmpty(`אין נתוני ${isElec ? "תמהיל חשמל" : "תמהיל אנרגיה"} עבור ${entity} בטווח שנבחר`);
+    drawChart({labels:years,datasets:[]}, "", "");
+    return;
+  }
+  showEmpty("");
+
+  const datasets = present.map(f => ({
+    label: f.label,
+    data: mixYears.map(y => { const v = valAt(entity, f[colKey], y); return v == null ? 0 : v; }),
+    backgroundColor: f.color + "cc",
+    borderColor: f.color,
+    borderWidth: 1,
+    fill: true,
+    pointRadius: 0,
+    pointHoverRadius: 3,
+    tension: 0.15,
+    stack: "mix",
+  }));
+
+  const unitLabel = isElec
+    ? (UNIT === "share" ? "% מייצור החשמל" : "ייצור חשמל (TWh)")
+    : (UNIT === "share" ? "% מצריכת האנרגיה הראשונית" : "צריכת אנרגיה ראשונית (TWh)");
+  const title = `${isElec ? "Electricity" : "Energy"} mix — ${entity}`;
+  drawChart({labels:mixYears,datasets}, title, unitLabel, {stacked:true, unit: UNIT === "share" ? "%" : "TWh"});
+}
+
+function renderCompare(years){
+  const col = document.getElementById("metricSel").value;
+  if(!compareEntities.length){ showEmpty("בחר מדינה או אזור אחד לפחות"); drawChart({labels:years,datasets:[]},"",""); return; }
+
+  const datasets = compareEntities.map((n,i) => {
+    const color = COMPARE_COLORS[i % COMPARE_COLORS.length];
+    return {
+      label: n,
+      data: years.map(y => { const v = valAt(n, col, y); return v == null ? null : v; }),
+      borderColor: color,
+      backgroundColor: color,
+      borderWidth: 1.8,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.15,
+      spanGaps: true,
+    };
+  });
+  const anyData = datasets.some(d => d.data.some(v => v != null));
+  if(!anyData){ showEmpty(`אין נתונים עבור "${DB.labels[col]||col}" בטווח / במדינות שנבחרו`); drawChart({labels:years,datasets:[]},"",""); return; }
+  showEmpty("");
+
+  drawChart({labels:years,datasets}, DB.labels[col] || col, DB.units[col] || "", {unit: DB.units[col] || ""});
+}
+
+// ── Chart.js ──────────────────────────────────────────────────────────
+function drawChart(data, title, yTitle, opts){
+  opts = opts || {};
+  if(chart){ chart.destroy(); chart = null; }
+  document.getElementById("xlsxBtn").disabled = data.datasets.length === 0;
+  chart = new Chart(document.getElementById("chart"), {
+    type: "line",
+    data,
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: {duration: 250},
+      interaction: {mode: "index", intersect: false},
+      plugins: {
+        title: {
+          display: !!title, text: title, color: "#e2e8f0",
+          font: {family: "'IBM Plex Mono',monospace", size: 13, weight: "600"},
+          padding: {bottom: 12},
+        },
+        legend: {
+          display: true, position: "bottom",
+          labels: {color: "#e2e8f0", font: {family: "'IBM Plex Mono',monospace", size: 10}, boxWidth: 12, padding: 8},
+        },
+        tooltip: {
+          backgroundColor: "#161922", borderColor: "#252a35", borderWidth: 1,
+          titleColor: "#6b7585", bodyColor: "#e2e8f0",
+          titleFont: {family: "'IBM Plex Mono',monospace", size: 10},
+          bodyFont: {family: "'IBM Plex Mono',monospace", size: 11},
+          padding: 10,
+          itemSort: (a,b) => b.parsed.y - a.parsed.y,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if(v == null) return `${ctx.dataset.label}: —`;
+              const u = opts.unit || "";
+              const num = Math.abs(v) >= 100 ? v.toLocaleString(undefined,{maximumFractionDigits:0})
+                        : v.toLocaleString(undefined,{maximumFractionDigits:2});
+              return `${ctx.dataset.label}: ${num}${u === "%" ? "%" : (u ? " " + u : "")}`;
+            },
+            footer: items => {
+              if(!opts.stacked) return "";
+              const tot = items.reduce((s,it) => s + (it.parsed.y || 0), 0);
+              return "סה\"כ: " + tot.toLocaleString(undefined,{maximumFractionDigits: opts.unit === "%" ? 1 : 1});
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {color: "#6b7585", font: {family: "'IBM Plex Mono',monospace", size: 10}, maxRotation: 0, autoSkipPadding: 16},
+          grid: {color: "#252a35"},
+        },
+        y: {
+          stacked: !!opts.stacked,
+          beginAtZero: !!opts.stacked,
+          ticks: {color: "#6b7585", font: {family: "'IBM Plex Mono',monospace", size: 10}},
+          grid: {color: "#252a35"},
+          title: {display: !!yTitle, text: yTitle, color: "#6b7585", font: {family: "'IBM Plex Mono',monospace", size: 10}},
+        },
+      },
+    },
+  });
+}
+
+// ── XLSX export ───────────────────────────────────────────────────────
+function downloadXlsx(){
+  if(!chart) return;
+  const years = chart.data.labels;
+  const header = ["year", ...chart.data.datasets.map(d => d.label)];
+  const rows = [header];
+  years.forEach((y,i) => rows.push([y, ...chart.data.datasets.map(d => d.data[i] ?? null)]));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "data");
+
+  const meta = [
+    ["source", DB.source],
+    ["source_url", DB.source_url],
+    ["csv_url", DB.csv_url],
+    ["licence", DB.licence],
+    ["generated", DB.generated],
+    ["mode", MODE],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(meta), "about");
+
+  const tag = MODE === "compare"
+    ? "compare_" + document.getElementById("metricSel").value
+    : (MODE === "mixElec" ? "elecmix_" : "energymix_") + document.getElementById("mixEntity").value.replace(/\s+/g,"");
+  XLSX.writeFile(wb, `owid_energy_${tag}_${years[0]}_${years[years.length-1]}.xlsx`);
+}
+
+init();
+</script>
+</body>
+</html>

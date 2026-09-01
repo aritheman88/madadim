@@ -2,7 +2,8 @@
 
 Source for **madadim.net** — a price-index / inflation explorer that lets you search, chart,
 and export Israeli CBS price indices alongside a growing set of international price data
-(commodity futures, USDA dairy, US CPI food items, Eurostat, World Bank, Bank of Israel FX).
+(commodity futures, USDA dairy, US CPI food items, Eurostat, World Bank, Bank of Israel FX),
+plus a standalone world-energy explorer at `/worldenergy` (Our World in Data).
 Deployed via GitHub Pages (`CNAME` = `madadim.net`); pushing to `main` deploys directly, no
 build step.
 
@@ -228,6 +229,7 @@ python fetch_cbs_avg_prices.py      # needs Israeli IP
 python fetch_yahoo_futures.py
 python fetch_usda_dairy.py          # needs usda_key in .env
 python fetch_bls_food_cpi.py        # needs bls_key in .env
+python worldenergy/owid_energy_export.py   # standalone page, not the main CATALOG
 ```
 Dependencies across all scripts: `requests`, `openpyxl`, `beautifulsoup4` (`pip install requests
 openpyxl beautifulsoup4`). No `requirements.txt` exists yet.
@@ -274,6 +276,53 @@ The pattern used for futures/USDA/BLS, in order:
 
 - `change/` — "CBS // Price Change Calculator", linked from the main page.
 - `gas/` — "Natural Gas // Imports & Price Explorer" (`gas_export.py` builds `gas_data.json`).
+- `worldenergy/` — "WorldEnergy // OWID Energy Explorer" (see below).
 - `lobbyists/` — "Lobbyists // Network Explorer" (Israeli lobbyist registry visualization).
 
-These weren't touched by the work described above; noted here just for orientation.
+`change/` and `lobbyists/` weren't touched by the data-source work described above.
+
+### worldenergy/ — Our World in Data energy dataset
+
+Standalone page at `madadim.net/worldenergy` (linked from the main header and the
+gas page). Same shell as `gas/`: dark UI, `Lamas` password gate, Chart.js,
+SheetJS export. It does **not** feed the main `index.html` CATALOG — the OWID
+data is entity×year panel data (220 countries + 16 aggregates × 66 metrics ×
+1965–present), which doesn't fit the flat named-series model.
+
+| | |
+|---|---|
+| Fetch script | `worldenergy/owid_energy_export.py` (no API key; `pip install requests`) |
+| Output | `worldenergy/energy_data.json` (~3.8 MB; GitHub Pages gzips it) |
+| Upstream | `https://raw.githubusercontent.com/owid/energy-data/master/owid-energy-data.csv` + its codebook |
+| Licence | OWID publishes the dataset under CC-BY for any reuse (see the energy-data repo README) |
+
+**Three view modes** in `worldenergy/index.html`:
+1. **Energy mix** — stacked area, primary-energy consumption by source for one
+   entity, TWh or % toggle.
+2. **Electricity mix** — same for electricity generation by source.
+3. **Compare** — one metric, up to 8 entities, multi-line.
+
+**Data-coverage gotchas found while building it (all handled in-script or in the UI):**
+- The CSV carries ~90 no-ISO "entities" that are mostly source-internal regions
+  (`Africa (EI)`, `OPEC (EIA)`, `Europe (Shift)`, …) which overlap and
+  double-count. The script keeps only OWID's own canonical aggregates (World,
+  6 continents, EU-27, 4 income groups) plus OECD/G7/G20/OPEC each taken from a
+  **single** source lineage so one entity is never a methodology mix. All other
+  no-ISO entities are dropped (78 of them, printed at the end of the run).
+- The Energy-Institute fuel-by-fuel breakdown only covers ~80 countries; Ember's
+  electricity generation covers ~215. OWID still emits zero-filled
+  `nuclear_consumption` / `biofuel_consumption` for countries with neither, so a
+  naive energy-mix chart for (e.g.) Nigeria would render a misleading sliver of
+  "bioenergy only". The page gates each mix mode on a real signal
+  (`fossil_fuel_consumption` for energy, `electricity_generation` for
+  electricity) and the entity dropdown is filtered per mode — energy mode lists
+  ~91 entities, electricity mode ~229.
+- `gdp` / `energy_per_gdp` end around 2022 (OWID's Maddison-based GDP series).
+- Pre-2000 electricity shares (EIA/Shift) sum to ~98%, not 100% — Ember's
+  post-2000 data is cleaner. Left as-is; it's faithful to the source.
+- The nine `*_electricity` columns sum exactly to `electricity_generation`; the
+  nine `*_consumption` columns sum to ~`primary_energy_consumption` (substitution
+  method, small residual). Verified against Israel / World / Germany.
+
+Refresh: `python worldenergy/owid_energy_export.py`, then commit the regenerated
+`energy_data.json`.
