@@ -281,6 +281,15 @@ The pattern used for futures/USDA/BLS, in order:
 
 `change/` and `lobbyists/` weren't touched by the data-source work described above.
 
+**Cross-page nav:** every page (root + all four subpages) carries the same small
+`☰ ניווט` dropdown in the top corner of its `<header>` — a self-contained
+`<nav class="sitenav" id="sitenav">` block (scoped `.sitenav*` CSS + a tiny IIFE
+that closes it on outside-click / Escape), links to all five pages, current page
+marked `class="current"`. It replaced the earlier ad-hoc row of `.navlink` /
+`.back` anchors. To add a page: drop the same block + CSS into its header and add
+one `<a>` line to the menu in all five files. On `lobbyists/` the dropdown is
+hidden below 760px (the page keeps its own `☰` sidebar toggle there).
+
 ### worldenergy/ — Our World in Data energy dataset
 
 Standalone page at `madadim.net/worldenergy` (linked from the main header and the

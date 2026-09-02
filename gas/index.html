@@ -27,7 +27,14 @@ body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',s
 header{border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
 header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
 header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
-.navlink{color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.75rem;text-decoration:none;border:1px solid var(--border);padding:5px 12px;border-radius:4px;}
+.sitenav{position:relative;margin-right:auto;align-self:center;font-family:'IBM Plex Mono',monospace;}
+.sitenav-toggle{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);color:var(--accent);font-family:inherit;font-size:.75rem;padding:5px 12px;border-radius:4px;cursor:pointer;}
+.sitenav-toggle:hover{border-color:var(--accent);}
+.sitenav-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;display:none;flex-direction:column;z-index:1500;box-shadow:0 10px 30px rgba(0,0,0,.45);}
+.sitenav.open .sitenav-menu{display:flex;}
+.sitenav-menu a{color:var(--text);text-decoration:none;font-size:.78rem;padding:8px 11px;border-radius:4px;white-space:nowrap;}
+.sitenav-menu a:hover{background:var(--bg);color:var(--accent);}
+.sitenav-menu a.current{color:var(--accent);opacity:.5;pointer-events:none;}
 
 .layout{display:flex;flex-direction:column;flex:1;min-height:0;}
 
@@ -125,10 +132,26 @@ function checkPassword(){
   <h1>Gas // Imports &amp; Price Explorer</h1>
   <span class="beta-badge">BETA</span>
   <p id="genDate">Natural gas imports (consumption − production) vs. wholesale price</p>
-  <a class="navlink" href="/" style="margin-right:auto;margin-left:8px;">← מדדי מחירים</a>
-  <a class="navlink" href="/worldenergy/">אנרגיה עולמית ▶</a>
-  <a class="navlink" href="/change/">חישוב שינוי מחיר ▶</a>
+  <nav class="sitenav" id="sitenav">
+    <button type="button" class="sitenav-toggle" aria-haspopup="true" aria-expanded="false"
+      onclick="var n=this.closest('.sitenav');this.setAttribute('aria-expanded',n.classList.toggle('open'))">☰ ניווט</button>
+    <div class="sitenav-menu">
+      <a href="/">מדדי מחירים — CBS</a>
+      <a href="/change/">חישוב שינוי מחיר</a>
+      <a class="current" href="/gas/">גז — יבוא ומחיר</a>
+      <a href="/worldenergy/">אנרגיה עולמית</a>
+      <a href="/lobbyists/">מפת שדלנים</a>
+    </div>
+  </nav>
 </header>
+<script>
+(function(){
+  var n=document.getElementById('sitenav');
+  function close(){ if(!n) return; n.classList.remove('open'); var b=n.querySelector('.sitenav-toggle'); if(b) b.setAttribute('aria-expanded','false'); }
+  document.addEventListener('click',function(e){ if(n && !n.contains(e.target)) close(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
+})();
+</script>
 
 <div class="layout">
   <div class="controls">
