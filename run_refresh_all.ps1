@@ -1,7 +1,7 @@
 # Wrapper for the monthly Task Scheduler job "\madadim\madadim data refresh".
 # Runs refresh_all.py (refresh every pre-fetched data file, commit + push what
-# actually changed), tees all output to a per-run log, prunes logs older than
-# 90 days. Exit code is the script's exit code so Task Scheduler's
+# actually changed), writes a clean UTF-8 per-run log, prunes logs older than
+# 90 days. Exit code is refresh_all.py's own exit code so Task Scheduler's
 # "Last Run Result" is meaningful:
 #   0 = all fetch jobs OK (with or without data changes)
 #   1 = ran, but one or more fetch jobs failed (the rest were still committed)
@@ -15,16 +15,27 @@ $py     = 'C:\Users\Ariel\anaconda3\python.exe'
 $logDir = Join-Path $dir 'logs'
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$log = Join-Path $logDir ('refresh_all_{0:yyyy-MM-dd_HH-mm-ss}.log' -f (Get-Date))
+$stamp   = '{0:yyyy-MM-dd_HH-mm-ss}' -f (Get-Date)
+$log     = Join-Path $logDir "refresh_all_$stamp.log"
+$outTmp  = Join-Path $logDir "refresh_all_$stamp.out.tmp"
+$errTmp  = Join-Path $logDir "refresh_all_$stamp.err.tmp"
 
-Set-Location $dir
-("[{0}] starting: {1} -u refresh_all.py" -f (Get-Date), $py) |
-    Tee-Object -FilePath $log
+# Start-Process with separate redirect files avoids PowerShell 5.1 wrapping the
+# child's stderr lines as NativeCommandError records (which would also flip $?).
+$p = Start-Process -FilePath $py `
+                   -ArgumentList '-u', 'refresh_all.py' `
+                   -WorkingDirectory $dir `
+                   -NoNewWindow -Wait -PassThru `
+                   -RedirectStandardOutput $outTmp `
+                   -RedirectStandardError  $errTmp
+$rc = $p.ExitCode
 
-& $py -u refresh_all.py *>&1 | Tee-Object -FilePath $log -Append
-$rc = $LASTEXITCODE
-
-("[{0}] exit code {1}" -f (Get-Date), $rc) | Tee-Object -FilePath $log -Append
+$header = "[$stamp] $py -u refresh_all.py  (exit $rc)"
+$body   = @(Get-Content -LiteralPath $outTmp -ErrorAction SilentlyContinue)
+$errs   = @(Get-Content -LiteralPath $errTmp -ErrorAction SilentlyContinue)
+if ($errs.Count) { $body += ''; $body += '----- stderr -----'; $body += $errs }
+,($header) + $body | Set-Content -LiteralPath $log -Encoding utf8
+Remove-Item -LiteralPath $outTmp, $errTmp -Force -ErrorAction SilentlyContinue
 
 Get-ChildItem $logDir -Filter 'refresh_all_*.log' -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-90) } |
