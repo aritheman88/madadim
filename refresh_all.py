@@ -36,6 +36,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +47,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent
 LOBBY_DIR = REPO.parent / "knesset" / "lobbyists"
 PY = sys.executable  # same interpreter that launched this script
+
+# Under Task Scheduler our stdout is a redirected file with the OS-default
+# (cp1252) encoding; the fetch scripts print em-dashes etc. Force UTF-8 both
+# for our own output and for every child process.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+CHILD_ENV = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
 # (label, working dir, [command args], output file relative to REPO or None)
 JOBS = [
@@ -75,7 +86,7 @@ def run_job(label, cwd, args):
     start = time.time()
     try:
         proc = subprocess.run(
-            [PY, "-u", *args], cwd=str(cwd), timeout=1800,
+            [PY, "-u", *args], cwd=str(cwd), timeout=1800, env=CHILD_ENV,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace",
         )
