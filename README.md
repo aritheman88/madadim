@@ -214,9 +214,32 @@ data.bls.gov/registrationEngine (free, raises the rate limit from 25 to 500 seri
 
 ## Refreshing all data
 
-No CI/cron is set up in this repo — refresh is manual. Python isn't necessarily on `PATH`; this
-session used a full path to an Anaconda install
-(`C:/Users/Ariel/anaconda3/python.exe`) since a Windows Store Python shim was shadowing it. Check
+### The easy way: `refresh_all.py`
+
+```bash
+python refresh_all.py            # run every fetch script, commit + push what changed
+python refresh_all.py --no-push  # ... but stop before pushing
+python refresh_all.py --no-git   # ... just regenerate the JSON, touch nothing in git
+python refresh_all.py --dry-run  # run the fetch scripts, report what would commit, revert
+```
+
+`refresh_all.py` runs each script below in turn (a single failure doesn't abort the rest), then
+for every modified output file compares it against `HEAD` with volatile timestamp keys stripped —
+if only a timestamp changed it reverts the file so the history doesn't churn multi-MB minified
+JSON for a no-op. Whatever has a real data change is committed (message lists the files + any
+failed jobs) and pushed to `main`. It refuses to run if the working tree is dirty, so nothing
+unrelated gets swept in.
+
+**Scheduled:** Windows Task Scheduler task `\madadim\madadim data refresh` runs
+`run_refresh_all.ps1` (wrapper: per-run log in `logs/`, 90-day prune) on the **5th of each month
+at 06:00** — after the month's CBS / Eurostat / BLS releases are out. It's a sibling of the daily
+`\madadim\Lobbyist registry refresh` task (which only touches the Postgres DB, not the site).
+Runs only while the machine is logged on as Ariel; `StartWhenAvailable` catches a missed run.
+
+### Running the scripts by hand
+
+Python isn't necessarily on `PATH`; use a full path to the Anaconda install
+(`C:/Users/Ariel/anaconda3/python.exe`) since a Windows Store Python shim shadows it. Check
 `python --version` actually runs before assuming `python script.py` will work.
 
 ```bash
@@ -231,8 +254,12 @@ python fetch_usda_dairy.py          # needs usda_key in .env
 python fetch_bls_food_cpi.py        # needs bls_key in .env
 python worldenergy/owid_energy_export.py   # standalone page, not the main CATALOG
 ```
+`refresh_all.py` additionally runs the lobbyist pipeline in `../knesset/lobbyists/`
+(`refresh_lobbyists.py --yes` then `export_lobbyist_data.py` → `lobbyists/lobbyists_data.json`).
+
 Dependencies across all scripts: `requests`, `openpyxl`, `beautifulsoup4` (`pip install requests
-openpyxl beautifulsoup4`). No `requirements.txt` exists yet.
+openpyxl beautifulsoup4`); the lobbyist pipeline also needs `psycopg2`, `pandas`, `python-dotenv`.
+No `requirements.txt` exists yet.
 
 Then `git add` the changed `*.json` files (and any script changes), commit, and `git push origin
 main` — GitHub Pages deploys straight from `main`, no build step.
