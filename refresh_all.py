@@ -70,13 +70,21 @@ _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([ T].*)?$")
 
 
 def run_job(label, cwd, args):
-    """Run one script, streaming its output. Returns (ok, seconds)."""
+    """Run one script, echoing its combined output. Returns (ok, seconds)."""
     print(f"\n{'='*72}\n>>> {label}\n    {PY} {' '.join(args)}  (cwd={cwd})\n{'='*72}", flush=True)
     start = time.time()
     try:
-        proc = subprocess.run([PY, "-u", *args], cwd=str(cwd), timeout=1800)
+        proc = subprocess.run(
+            [PY, "-u", *args], cwd=str(cwd), timeout=1800,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+        )
+        if proc.stdout:
+            print(proc.stdout, end="" if proc.stdout.endswith("\n") else "\n", flush=True)
         ok = proc.returncode == 0
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        if exc.output:
+            print(exc.output, flush=True)
         print(f"!!! {label}: TIMED OUT after 1800s", flush=True)
         ok = False
     except Exception as exc:  # noqa: BLE001 - want everything logged, nothing fatal
