@@ -5,6 +5,9 @@
 # IDE
 .idea/
 
+# refresh_all.py / Task Scheduler run logs
+logs/
+
 # Python
 __pycache__/
 *.pyc
