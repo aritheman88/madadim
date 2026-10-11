@@ -15,12 +15,20 @@
 .modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
 .modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
 .modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
-.modal input[type=password]{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 14px;font-family:'IBM Plex Mono',monospace;font-size:.9rem;border-radius:4px;outline:none;margin-top:16px;text-align:center;}
-.modal input[type=password]:focus{border-color:var(--accent);}
-.modal .err{color:var(--danger);font-size:.75rem;font-family:'IBM Plex Mono',monospace;margin-top:8px;min-height:18px;}
 .modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
 .modal button:hover{opacity:.85;}
 .modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.modal.sources{max-width:560px;text-align:right;}
+.modal.sources h2{text-align:center;}
+.modal.sources ul{list-style:none;margin:6px 0 10px;}
+.modal.sources li{font-size:.8rem;line-height:1.6;padding:6px 0;border-bottom:1px solid var(--border);}
+.modal.sources li:last-child{border-bottom:none;}
+.modal.sources a{color:var(--accent);text-decoration:none;}
+.modal.sources a:hover{text-decoration:underline;}
+.modal.sources .src-note{font-size:.72rem;color:var(--muted);}
+.modal.sources .close-row{text-align:center;}
+.info-btn{width:20px;height:20px;border-radius:50%;border:1px solid var(--muted);background:none;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:.7rem;font-weight:600;font-style:italic;cursor:pointer;align-self:center;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.info-btn:hover{border-color:var(--accent);color:var(--accent);}
 .beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
 *{box-sizing:border-box;margin:0;padding:0;}
 html{height:100%;overflow:hidden;}
@@ -86,7 +94,7 @@ canvas{width:100%!important;height:100%!important;}
 </head>
 <body>
 
-<div class="overlay" id="mobileOverlay">
+<div class="overlay hidden" id="mobileOverlay">
   <div class="modal">
     <h2>⚠ שים לב</h2>
     <p>האתר לא מותאם לשימוש במכשירים ניידים.</p>
@@ -103,17 +111,24 @@ canvas{width:100%!important;height:100%!important;}
     <p>אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם או ייגרם כתוצאה מהסתמכות על הנתונים.</p>
     <hr class="divider">
     <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
-    <button onclick="showPassword()">הבנתי, המשך</button>
+    <button onclick="document.getElementById('disclaimerOverlay').classList.add('hidden')">הבנתי, המשך</button>
   </div>
 </div>
 
-<div class="overlay hidden" id="passwordOverlay">
-  <div class="modal">
-    <h2>// גישה מוגבלת</h2>
-    <p>הזן סיסמה להמשך</p>
-    <input type="password" id="pwInput" placeholder="סיסמה" onkeydown="if(event.key==='Enter')checkPassword()">
-    <div class="err" id="pwErr"></div>
-    <button onclick="checkPassword()">כניסה</button>
+<div class="overlay hidden" id="sourcesOverlay" onclick="if(event.target===this)toggleSources(false)">
+  <div class="modal sources" role="dialog" aria-labelledby="sourcesTitle">
+    <h2 id="sourcesTitle">// מקורות המידע</h2>
+    <p>הנתונים באתר נלקחים מ<a href="https://github.com/owid/energy-data" target="_blank" rel="noopener">מאגר נתוני האנרגיה של Our World in Data</a>, המאחד ומעבד נתונים מהמקורות הבאים:</p>
+    <ul>
+      <li><a href="https://www.energyinst.org/statistical-review/" target="_blank" rel="noopener">Energy Institute — Statistical Review of World Energy</a><br><span class="src-note">צריכת אנרגיה ראשונית לפי מקור, ייצור דלקים פוסיליים, ונתוני ייצור חשמל לשנים שלפני כיסוי Ember</span></li>
+      <li><a href="https://ember-energy.org/data/yearly-electricity-data/" target="_blank" rel="noopener">Ember — Yearly Electricity Data</a><br><span class="src-note">ייצור חשמל לפי מקור, ביקוש לחשמל ועצימות פחמן בייצור החשמל (בעיקר מ-2000 ואילך)</span></li>
+      <li><a href="https://www.eia.gov/opendata/bulkfiles.php" target="_blank" rel="noopener">U.S. Energy Information Administration (EIA) — International Energy Data</a><br><span class="src-note">סך צריכת האנרגיה הראשונית (וצריכה לנפש / לתמ"ג) למדינות שאינן מכוסות ב-Energy Institute</span></li>
+      <li><a href="https://www.theshiftdataportal.org/" target="_blank" rel="noopener">The Shift Data Portal</a><br><span class="src-note">נתונים היסטוריים על ייצור פחם, נפט וגז</span></li>
+      <li><a href="https://www.rug.nl/ggdc/historicaldevelopment/maddison/" target="_blank" rel="noopener">Maddison Project Database</a><br><span class="src-note">תמ"ג (ולכן גם עצימות אנרגיה לתמ"ג) — עד כ-2022</span></li>
+      <li><a href="https://ourworldindata.org/population-sources" target="_blank" rel="noopener">Our World in Data — Population</a><br><span class="src-note">אוכלוסייה, לחישוב נתונים לנפש</span></li>
+    </ul>
+    <p class="src-note">הנתונים מתפרסמים ברישיון CC BY. האתר מתעדכן אוטומטית מהמאגר אחת לחודש.</p>
+    <div class="close-row"><button onclick="toggleSources(false)">סגור</button></div>
   </div>
 </div>
 
@@ -129,28 +144,17 @@ canvas{width:100%!important;height:100%!important;}
     document.getElementById('disclaimerOverlay').classList.remove('hidden');
   }
 })();
-function showPassword(){
-  document.getElementById('disclaimerOverlay').classList.add('hidden');
-  document.getElementById('passwordOverlay').classList.remove('hidden');
-  setTimeout(()=>document.getElementById('pwInput').focus(),100);
+function toggleSources(show){
+  document.getElementById('sourcesOverlay').classList.toggle('hidden', !show);
 }
-function checkPassword(){
-  const val = document.getElementById('pwInput').value;
-  if(val === 'Lamas'){
-    document.getElementById('passwordOverlay').classList.add('hidden');
-  } else {
-    const err = document.getElementById('pwErr');
-    err.textContent = 'סיסמה שגויה';
-    document.getElementById('pwInput').value='';
-    setTimeout(()=>err.textContent='', 2000);
-  }
-}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') toggleSources(false); });
 </script>
 
 <header>
   <h1>WorldEnergy // OWID Energy Explorer</h1>
   <span class="beta-badge">BETA</span>
   <p id="genDate">Our World in Data · energy mix, electricity mix &amp; cross-country comparison</p>
+  <button type="button" class="info-btn" onclick="toggleSources(true)" title="מקורות המידע" aria-label="מקורות המידע">i</button>
   <nav class="sitenav" id="sitenav">
     <button type="button" class="sitenav-toggle" aria-haspopup="true" aria-expanded="false"
       onclick="var n=this.closest('.sitenav');this.setAttribute('aria-expanded',n.classList.toggle('open'))">☰ ניווט</button>

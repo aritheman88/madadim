@@ -320,7 +320,7 @@ hidden below 760px (the page keeps its own `☰` sidebar toggle there).
 ### worldenergy/ — Our World in Data energy dataset
 
 Standalone page at `madadim.net/worldenergy` (linked from the main header and the
-gas page). Same shell as `gas/`: dark UI, `Lamas` password gate, Chart.js,
+gas page). Same shell as `gas/`: dark UI (no password gate; header "i" button opens a sources modal), Chart.js,
 SheetJS export. It does **not** feed the main `index.html` CATALOG — the OWID
 data is entity×year panel data (220 countries + 16 aggregates × 66 metrics ×
 1965–present), which doesn't fit the flat named-series model.
