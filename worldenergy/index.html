@@ -381,11 +381,14 @@ function yearExtentFor(names){
   if(!isFinite(lo)) return [DB.year_min, DB.latest_year];
   return [lo, hi];
 }
+// Pre-2000 data mixes source lineages (EI / EIA / Shift before Ember's
+// electricity series starts), so open on 2000+; earlier years stay selectable.
+const DEFAULT_FROM_YEAR = 2000;
 function resetYearBounds(){
   const [lo, hi] = yearExtentFor(activeEntities());
   const f = document.getElementById("fromYear"), t = document.getElementById("toYear");
   f.min = t.min = lo; f.max = t.max = hi;
-  f.value = Math.max(lo, MODE === "compare" ? Math.max(lo, 1985) : lo);
+  f.value = Math.min(hi, Math.max(lo, DEFAULT_FROM_YEAR));
   t.value = hi;
 }
 function onYearRangeChange(){
