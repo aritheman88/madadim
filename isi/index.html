@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ISI Committees // Network Explorer</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Hebrew:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--surface:#161922;--border:#252a35;--text:#e2e8f0;--muted:#6b7585;--accent:#4ade80;--warn:#f59e0b;--danger:#f87171;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+.overlay.hidden{display:none;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px 36px;max-width:520px;width:90%;text-align:center;direction:rtl;}
+.modal h2{font-family:'IBM Plex Mono',monospace;color:var(--accent);margin-bottom:16px;font-size:1rem;}
+.modal p{font-size:.85rem;color:var(--text);line-height:1.7;margin-bottom:10px;}
+.modal p.warn{color:var(--warn);font-size:.78rem;margin-top:8px;}
+.modal button{margin-top:16px;padding:9px 24px;border-radius:4px;border:none;background:var(--accent);color:var(--bg);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.82rem;font-weight:600;}
+.modal button:hover{opacity:.85;}
+.modal .divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.beta-badge{background:#7c3aed22;border:1px solid #7c3aed;color:#a78bfa;font-family:'IBM Plex Mono',monospace;font-size:.65rem;padding:2px 8px;border-radius:10px;letter-spacing:.06em;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'IBM Plex Sans Hebrew',sans-serif;height:100vh;height:100dvh;overflow:hidden;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom);}
+header{border-bottom:1px solid var(--border);padding:16px 28px;padding-top:calc(16px + env(safe-area-inset-top));display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+header h1{font-family:'IBM Plex Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent);letter-spacing:.05em;}
+header p{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+.menu-btn{display:none;margin-left:auto;order:99;background:var(--surface);border:1px solid var(--border);color:var(--accent);width:38px;height:38px;border-radius:4px;font-size:1.1rem;cursor:pointer;align-items:center;justify-content:center;}
+.sitenav{position:relative;margin-right:auto;align-self:center;font-family:'IBM Plex Mono',monospace;}
+.sitenav-toggle{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);color:var(--accent);font-family:inherit;font-size:.75rem;padding:5px 12px;border-radius:4px;cursor:pointer;}
+.sitenav-toggle:hover{border-color:var(--accent);}
+.sitenav-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px;display:none;flex-direction:column;z-index:1500;box-shadow:0 10px 30px rgba(0,0,0,.45);}
+.sitenav.open .sitenav-menu{display:flex;}
+.sitenav-menu a{color:var(--text);text-decoration:none;font-size:.78rem;padding:8px 11px;border-radius:4px;white-space:nowrap;}
+.sitenav-menu a:hover{background:var(--bg);color:var(--accent);}
+.sitenav-menu a.current{color:var(--accent);opacity:.5;pointer-events:none;}
+
+.layout{display:flex;flex:1;min-height:0;position:relative;}
+
+.side{width:320px;min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;background:var(--bg);}
+.field label,.field .lbl{display:block;font-size:.66rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.field input[type=text]{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;font-family:'IBM Plex Sans Hebrew',sans-serif;font-size:.88rem;border-radius:4px;outline:none;}
+.field input[type=text]:focus{border-color:var(--accent);}
+.field select{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:.82rem;border-radius:4px;outline:none;}
+.field select:focus{border-color:var(--accent);}
+.yrow{display:flex;align-items:center;gap:8px;}
+.yrow span{font-size:.75rem;color:var(--muted);}
+.field input[type=range]{width:100%;accent-color:var(--accent);}
+.field .hint{font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:6px;line-height:1.5;}
+.field .opt{display:flex;align-items:center;gap:8px;font-size:.8rem;margin:4px 0;cursor:pointer;}
+.field .opt input{accent-color:var(--accent);}
+.clear-btn{padding:8px 10px;min-height:36px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.7rem;margin-top:8px;}
+.clear-btn:hover{color:var(--text);border-color:var(--muted);}
+.side-close{display:none;}
+.minw-val{color:var(--accent);font-family:'IBM Plex Mono',monospace;}
+
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:none;}
+.backdrop.show{display:block;}
+
+.node-detail{position:absolute;left:12px;bottom:12px;top:12px;width:min(460px,calc(100% - 24px));overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;z-index:15;transform:translateX(-120%);transition:transform .22s ease;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+.node-detail.show{transform:translateX(0);}
+.node-detail .ndClose{position:absolute;top:8px;left:8px;background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:6px;line-height:1;}
+.ndTitle{font-size:1rem;font-weight:600;color:var(--text);margin-bottom:4px;padding-left:24px;}
+.ndSub{font-size:.75rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:10px;}
+.ndStats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0 12px;}
+.ndStat{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 8px;text-align:center;}
+.ndStat b{display:block;color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:.95rem;}
+.ndStat span{font-size:.65rem;color:var(--muted);}
+.ndH{font-size:.68rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px;}
+.ndTable{width:100%;border-collapse:collapse;font-size:.76rem;}
+.ndTable th{text-align:right;color:var(--muted);font-weight:400;font-family:'IBM Plex Mono',monospace;font-size:.66rem;border-bottom:1px solid var(--border);padding:4px;position:sticky;top:-14px;background:var(--surface);}
+.ndTable td{padding:4px;border-bottom:1px solid #1e222c;vertical-align:top;}
+.ndTable td.num{font-family:'IBM Plex Mono',monospace;color:var(--accent);white-space:nowrap;}
+.ndTable a{color:#7dd3fc;text-decoration:none;}
+.ndTable a:hover{text-decoration:underline;}
+.ndTable .lnk{cursor:pointer;color:var(--text);}
+.ndTable .lnk:hover{color:var(--accent);}
+.ndMore{font-size:.7rem;color:var(--muted);margin-top:6px;font-family:'IBM Plex Mono',monospace;}
+.ndBtns{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;}
+.ndBtns button{flex:1;}
+
+.legend{display:flex;flex-direction:column;gap:6px;}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--text);}
+.legend-swatch{width:10px;height:10px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.legend-swatch.sq{border-radius:1px;transform:rotate(45deg);}
+
+.xlsx-btn{padding:9px 16px;min-height:40px;border-radius:4px;border:1px solid #22c55e;background:var(--surface);color:#22c55e;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:.75rem;transition:all .2s;width:100%;}
+.xlsx-btn:hover{background:#22c55e22;}
+.xlsx-btn:disabled{opacity:.3;cursor:not-allowed;}
+.focus-btn{border-color:var(--border);color:var(--text);}
+.focus-btn:hover{background:var(--bg);}
+
+.side-footer{margin-top:auto;font-size:.65rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;line-height:1.6;}
+.side-footer a{color:var(--muted);}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.status-bar{padding:5px 20px;font-size:.7rem;color:var(--muted);font-family:'IBM Plex Mono',monospace;border-bottom:1px solid var(--border);min-height:26px;display:flex;align-items:center;gap:10px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex-shrink:0;}
+.dot.loading{background:var(--warn);animation:pulse 1s infinite;}
+.dot.ok{background:var(--accent);}
+.dot.error{background:var(--danger);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.graph-wrap{flex:1;min-height:0;position:relative;}
+#network{width:100%;height:100%;}
+.empty-state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem;pointer-events:none;}
+
+.graph-loading{position:absolute;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:10;transition:opacity .25s;}
+.graph-loading.hidden{opacity:0;pointer-events:none;}
+.loading-box{text-align:center;font-family:'IBM Plex Mono',monospace;}
+.loading-box .msg{color:var(--muted);font-size:.8rem;margin-bottom:14px;}
+.loading-bar-track{width:260px;height:5px;background:var(--surface);border:1px solid var(--border);border-radius:3px;overflow:hidden;}
+.loading-bar-fill{height:100%;width:2%;background:var(--accent);transition:width .12s linear;}
+.loading-pct{color:var(--accent);font-size:.72rem;margin-top:10px;}
+
+.side::-webkit-scrollbar,.node-detail::-webkit-scrollbar{width:6px;}
+.side::-webkit-scrollbar-track,.node-detail::-webkit-scrollbar-track{background:var(--bg);}
+.side::-webkit-scrollbar-thumb,.node-detail::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+@media (max-width: 760px){
+  header{padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));gap:10px;}
+  header p{flex-basis:100%;order:3;}
+  header .sitenav{display:none;}
+  .menu-btn{display:flex;}
+  .side{
+    position:fixed;top:var(--header-h, 60px);bottom:0;right:0;
+    width:min(320px, 82vw);min-width:0;
+    box-shadow:-6px 0 24px rgba(0,0,0,.4);
+    transform:translateX(100%);transition:transform .22s ease;
+    z-index:45;padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  }
+  .side.open{transform:translateX(0);}
+  .field input[type=text]{font-size:16px;}
+  .side-close{display:block;margin-bottom:4px;}
+  .node-detail{left:8px;right:8px;top:auto;bottom:8px;width:auto;max-height:65%;transform:translateY(130%);}
+  .node-detail.show{transform:translateY(0);}
+  .modal{padding:26px 22px;}
+}
+</style>
+</head>
+<body>
+
+<div class="overlay hidden" id="disclaimerOverlay">
+  <div class="modal">
+    <h2>ISI Committees // Network Explorer</h2>
+    <p>מפת הקשרים בין ועדות התקינה של מכון התקנים לבין המשתתפים בישיבותיהן, על בסיס הפרוטוקולים וההזמנות שהמכון מפרסם.</p>
+    <p>הנתונים חולצו אוטומטית מקובצי PDF ו-HTML ועשויים להכיל שגיאות. רישום נוכחות בפועל קיים בעיקר מ-2023; לפני כן ההשתתפות מבוססת על רשימות המוזמנים.</p>
+    <p>אין להסתמך על הנתונים המופיעים באתר זה לצורך ביצוע עסקאות ו/או פעולות. אתר לובי 99 לא אחראי בכל אופן לכל נזק ו/או הפסד שעלול להיגרם כתוצאה מהסתמכות על הנתונים.</p>
+    <hr class="divider">
+    <p class="warn">גרסת בטא — הנתונים עשויים להכיל שגיאות</p>
+    <button onclick="document.getElementById('disclaimerOverlay').classList.add('hidden')">הבנתי, המשך</button>
+  </div>
+</div>
+<script>document.getElementById('disclaimerOverlay').classList.remove('hidden');</script>
+
+<header>
+  <h1>ISI Committees // Network Explorer</h1>
+  <span class="beta-badge">BETA</span>
+  <p id="genDate">ועדות מכון התקנים והמשתתפים בישיבותיהן</p>
+  <nav class="sitenav" id="sitenav">
+    <button type="button" class="sitenav-toggle" aria-haspopup="true" aria-expanded="false"
+      onclick="var n=this.closest('.sitenav');this.setAttribute('aria-expanded',n.classList.toggle('open'))">☰ ניווט</button>
+    <div class="sitenav-menu">
+      <a href="/">מדדי מחירים — CBS</a>
+      <a href="/change/">חישוב שינוי מחיר</a>
+      <a href="/gas/">גז — יבוא ומחיר</a>
+      <a href="/worldenergy/">אנרגיה עולמית</a>
+      <a href="/lobbyists/">מפת שדלנים</a>
+      <a class="current" href="/isi/">ועדות מכון התקנים</a>
+    </div>
+  </nav>
+  <button class="menu-btn" id="menuBtn" onclick="openSidebar()" aria-label="תפריט">☰</button>
+</header>
+<script>
+(function(){
+  var n=document.getElementById('sitenav');
+  function close(){ if(!n) return; n.classList.remove('open'); var b=n.querySelector('.sitenav-toggle'); if(b) b.setAttribute('aria-expanded','false'); }
+  document.addEventListener('click',function(e){ if(n && !n.contains(e.target)) close(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
+})();
+</script>
+
+<div class="layout">
+  <div class="backdrop" id="backdrop" onclick="closeSidebar()"></div>
+  <div class="side" id="side">
+    <button class="clear-btn side-close" onclick="closeSidebar()">✕ סגור</button>
+    <div class="field">
+      <label for="searchBox">חיפוש — שם אדם, שם ועדה או מספר ועדה</label>
+      <input type="text" id="searchBox" placeholder="לדוגמה: גז, 5403, כהן..." dir="rtl" oninput="onSearchInput()">
+      <div class="hint">מציג את הצמתים התואמים וכל הקשרים הישירים שלהם (ללא סף מינימום). שדה ריק מציג את המפה המלאה.</div>
+      <button class="clear-btn" onclick="clearSearch()">נקה חיפוש</button>
+    </div>
+
+    <div class="field">
+      <span class="lbl">שנים</span>
+      <div class="yrow"><span>מ-</span><select id="yFrom" onchange="onYearChange(this)" aria-label="משנה"></select>
+        <span>עד</span><select id="yTo" onchange="onYearChange(this)" aria-label="עד שנה"></select></div>
+      <div class="hint">חל על הקשרים, גודל הצמתים, חלונית הפרטים וקובצי ה-XLSX.</div>
+    </div>
+
+    <div class="field">
+      <label for="commBox">ועדה</label>
+      <input type="text" id="commBox" list="commList" placeholder="מספר או שם ועדה..." dir="rtl" onchange="onFilterChange()" oninput="onCommInput()">
+      <datalist id="commList"></datalist>
+      <label class="opt"><input type="checkbox" id="commSubs" checked onchange="onFilterChange()">כולל ועדות משנה</label>
+      <label class="opt"><input type="checkbox" id="commHop" onchange="onFilterChange()">הצג גם ועדות אחרות של המשתתפים (לפי הסף)</label>
+      <button class="clear-btn" onclick="clearCommittee()">כל הוועדות</button>
+    </div>
+
+    <div class="field">
+      <span class="lbl">מה נחשב השתתפות</span>
+      <label class="opt"><input type="radio" name="mode" value="all" checked onchange="onFilterChange()">נוכחות, ובישיבות ללא רישום נוכחות — הזמנה</label>
+      <label class="opt"><input type="radio" name="mode" value="att" onchange="onFilterChange()">נוכחות מתועדת בלבד (בעיקר 2023 ואילך)</label>
+    </div>
+
+    <div class="field">
+      <label for="minW">סף מינימום: <span class="minw-val" id="minWVal">5</span> ישיבות משותפות לקשר</label>
+      <input type="range" id="minW" min="1" max="20" value="5" oninput="document.getElementById('minWVal').textContent=this.value" onchange="onFilterChange()">
+      <div class="hint">סף נמוך מציג יותר צמתים ומאט את הציור.</div>
+    </div>
+
+    <div class="field">
+      <span class="lbl">מקרא וסינון</span>
+      <div class="legend">
+        <label class="legend-item opt"><input type="checkbox" class="tfilter" value="c" checked onchange="onFilterChange()"><span class="legend-swatch sq" style="background:#F59E0B;"></span>ועדה מרכזית</label>
+        <label class="legend-item opt"><input type="checkbox" class="tfilter" value="t" checked onchange="onFilterChange()"><span class="legend-swatch sq" style="background:#4C9BE8;"></span>ועדה טכנית</label>
+        <label class="legend-item opt"><input type="checkbox" class="tfilter" value="e" checked onchange="onFilterChange()"><span class="legend-swatch sq" style="background:#22D3EE;"></span>ועדת מומחים</label>
+        <label class="legend-item opt"><input type="checkbox" class="pfilter" value="m" checked onchange="onFilterChange()"><span class="legend-swatch" style="background:#CBD5E1;"></span>חבר/ת ועדה</label>
+        <label class="legend-item opt"><input type="checkbox" class="pfilter" value="x" checked onchange="onFilterChange()"><span class="legend-swatch" style="background:#F87171;"></span>מוזמן/ת חיצוני/ת בלבד</label>
+        <label class="legend-item opt"><input type="checkbox" class="pfilter" value="s" onchange="onFilterChange()"><span class="legend-swatch" style="background:#A78BFA;"></span>צוות המכון (מרכז/ת, רשם/ת)</label>
+      </div>
+      <div class="hint">גודל צומת = מספר הישיבות; עובי קשר = מספר הישיבות המשותפות. צוות המכון מוסתר כברירת מחדל כי הוא מחבר כמעט כל ועדה.</div>
+    </div>
+
+    <button class="xlsx-btn" id="xlsxBtn" onclick="downloadViewXlsx()" disabled>⬇ הורדת הקשרים המוצגים (XLSX)</button>
+
+    <div class="side-footer" id="sideFooter"></div>
+  </div>
+
+  <div class="main">
+    <div class="status-bar">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">טוען...</span>
+    </div>
+    <div class="graph-wrap">
+      <div class="empty-state" id="emptyState"></div>
+      <div id="network"></div>
+      <div class="graph-loading hidden" id="graphLoading">
+        <div class="loading-box">
+          <div class="msg">בונה את מפת הקשרים...</div>
+          <div class="loading-bar-track"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+          <div class="loading-pct" id="loadingPct">0%</div>
+        </div>
+      </div>
+      <div class="node-detail" id="nodeDetail">
+        <button class="ndClose" onclick="closeNodeDetail()" aria-label="סגור">✕</button>
+        <div id="nodeDetailBody"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TYPE_NAMES = { c: 'ועדה מרכזית', t: 'ועדה טכנית', e: 'ועדת מומחים' };
+const TYPE_COLORS = { c: '#F59E0B', t: '#4C9BE8', e: '#22D3EE' };
+const CAT_NAMES = { m: 'חבר/ת ועדה', x: 'מוזמן/ת חיצוני/ת', s: 'צוות מכון התקנים' };
+const CAT_COLORS = { m: '#CBD5E1', x: '#F87171', s: '#A78BFA' };
+const ROLE_HE = { attended: 'נכח/ה', guest: 'אורח/ת', chair: 'יו״ר', coordinator: 'מרכז/ת', recorder: 'רשם/ת',
+                  member_invited: 'חבר/ה מוזמן/ת', invitee: 'מוזמן/ת חיצוני/ת', absent: 'נעדר/ה' };
+const DETAIL_ROWS = 60;   // rows shown per table in the detail panel (the XLSX has everything)
+
+let DATA = null, DECISIONS = null;
+let B = {};               // role name -> bit
+let ATT_MASK = 0, INV_MASK = 0;
+let comm = [], ppl = [], sess = [];
+const C_OFFSET = 100000;  // committee node values are offset so the scaling function can size the two kinds separately
+let edgeCache = new Map(); // 'mode|from|to' -> {map: Map('c|p' -> {c, p, w, sessions}), cN, pN, maxC, maxP}
+let E = null;              // edges/sizes for the current mode and years
+let network = null, nodesDS = null, currentEdges = [], searchTimer = null, selected = null;
+const isTouchViewport = () => window.matchMedia('(max-width: 760px)').matches;
+
+function setStatus(state, msg){
+  document.getElementById('dot').className = 'dot ' + state;
+  document.getElementById('statusText').textContent = msg;
+}
+function setHeaderHeightVar(){
+  document.documentElement.style.setProperty('--header-h', document.querySelector('header').offsetHeight + 'px');
+}
+window.addEventListener('resize', setHeaderHeightVar);
+setHeaderHeightVar();
+function openSidebar(){ document.getElementById('side').classList.add('open'); document.getElementById('backdrop').classList.add('show'); }
+function closeSidebar(){ document.getElementById('side').classList.remove('open'); document.getElementById('backdrop').classList.remove('show'); }
+function esc(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const mode = () => document.querySelector('input[name=mode]:checked').value;
+const yFrom = () => document.getElementById('yFrom').value;
+const yTo = () => document.getElementById('yTo').value;
+const inYears = s => { const y = s.date.slice(0, 4); return y >= yFrom() && y <= yTo(); };
+const cSess = c => c.sessions.filter(si => inYears(sess[si]));          // committee sessions in the year range
+const pRows = p => p.rows.filter(r => inYears(sess[r.s]));              // person-session rows in the year range
+const yearsLabel = () => yFrom() === yTo() ? yFrom() : `${yFrom()}-${yTo()}`;
+const fmtDate = d => d ? d.split('-').reverse().join('/') : '';
+
+async function init(){
+  setStatus('loading', 'טוען נתונים...');
+  try{
+    const res = await fetch('isi_data.json');
+    if(!res.ok) throw new Error(`isi_data.json HTTP ${res.status}`);
+    DATA = await res.json();
+  } catch(e){
+    setStatus('error', `שגיאה בטעינת הנתונים: ${e.message}`);
+    return;
+  }
+  DATA.roles.forEach((r, i) => B[r] = 1 << i);
+  ATT_MASK = B.attended | B.guest | B.chair | B.coordinator | B.recorder;
+  INV_MASK = B.member_invited | B.invitee;
+
+  comm = DATA.committees.map(([num, type, name, parent], i) => ({ i, num, type, name, parent, sessions: [] }));
+  ppl = DATA.people.map(([name, variants, cat], i) => ({ i, name, variants, cat, rows: [] }));
+  sess = DATA.sessions.map(([id, c, no, date, url, hasAtt, nDec], i) => ({ i, id, c, no, date, url, hasAtt, nDec, rows: [] }));
+  sess.forEach(s => comm[s.c].sessions.push(s.i));
+  DATA.sp.forEach(([si, pi, m]) => { const r = { s: si, p: pi, m }; sess[si].rows.push(r); ppl[pi].rows.push(r); });
+
+  const years = [...new Set(sess.map(s => s.date.slice(0, 4)))].sort();
+  const opts = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  document.getElementById('yFrom').innerHTML = opts;
+  document.getElementById('yTo').innerHTML = opts;
+  document.getElementById('yFrom').value = years[0];
+  document.getElementById('yTo').value = years[years.length - 1];
+  document.getElementById('commList').innerHTML = [...comm].sort((a, b) => a.num.localeCompare(b.num))
+    .map(c => `<option value="${esc(committeeLabel(c))}"></option>`).join('');
+  comm.forEach(c => c.first = c.sessions.length ? sess[c.sessions[0]].date : '');
+  comm.forEach(c => c.last = c.sessions.length ? sess[c.sessions[c.sessions.length - 1]].date : '');
+
+  document.getElementById('genDate').textContent =
+    `${comm.length} ועדות · ${ppl.length} אנשים · ${sess.length} ישיבות (${sess[0].date.slice(0,4)}–${sess[sess.length-1].date.slice(0,4)})`;
+  document.getElementById('sideFooter').innerHTML =
+    `עודכן: ${esc(DATA.generated)}<br>מקור: <a href="https://www.sii.org.il/he/special-searches/committee-protocols" target="_blank" rel="noopener">פרוטוקולי ועדות — מכון התקנים</a>`;
+  document.getElementById('xlsxBtn').disabled = false;
+  applyFilter();
+}
+
+// edges and node sizes for the current mode and year range (cached)
+function computeEdges(){
+  const md = mode(), key = `${md}|${yFrom()}|${yTo()}`;
+  if(edgeCache.has(key)) return edgeCache.get(key);
+  const map = new Map(), cN = new Array(comm.length).fill(0), pN = new Array(ppl.length).fill(0);
+  sess.forEach(s => { if(inYears(s)) cN[s.c]++; });   // committee size: sessions held
+  DATA.sp.forEach(([si, pi, m]) => {
+    const s = sess[si];
+    if(!inYears(s) || !participates(m, s, md)) return;
+    const k = s.c + '|' + pi;
+    let e = map.get(k);
+    if(!e){ e = { c: s.c, p: pi, w: 0, sessions: [] }; map.set(k, e); }
+    e.w++; e.sessions.push(si); pN[pi]++;               // person size: sessions taken part in
+  });
+  const res = { map, cN, pN, maxC: Math.max(1, ...cN), maxP: Math.max(1, ...pN) };
+  edgeCache.set(key, res);
+  return res;
+}
+
+function participates(m, s, md){
+  if(md === 'att') return s.hasAtt && (m & ATT_MASK);
+  return (m & ATT_MASK) || (!s.hasAtt && (m & INV_MASK));
+}
+
+function onSearchInput(){ clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 300); }
+function clearSearch(){ document.getElementById('searchBox').value = ''; closeNodeDetail(); applyFilter(); }
+function onYearChange(el){
+  if(yFrom() > yTo()){   // keep from <= to
+    if(el.id === 'yFrom') document.getElementById('yTo').value = yFrom();
+    else document.getElementById('yFrom').value = yTo();
+  }
+  onFilterChange();
+}
+// the committee box holds "<number> <name>" (picked from the list) or typed text; returns the
+// committee number, null when empty, '' when it matches nothing
+function selectedCommittee(){
+  const v = document.getElementById('commBox').value.trim();
+  if(!v) return null;
+  const num = v.split(/\s+/)[0];
+  if(comm.some(c => c.num === num)) return num;
+  if(/^\d+$/.test(v) && comm.some(c => c.num.startsWith(v))) return v;   // number prefix: all committees under it
+  const byName = comm.find(c => c.name === v);
+  return byName ? byName.num : '';
+}
+function onCommInput(){ if(selectedCommittee() !== ''){ clearTimeout(searchTimer); searchTimer = setTimeout(onFilterChange, 300); } }
+function clearCommittee(){ document.getElementById('commBox').value = ''; onFilterChange(); }
+function onFilterChange(){
+  applyFilter();
+  if(selected) showDetail(selected);
+}
+
+function applyFilter(){
+  if(!DATA) return;
+  const q = document.getElementById('searchBox').value.trim();
+  const minW = +document.getElementById('minW').value;
+  const types = new Set([...document.querySelectorAll('.tfilter:checked')].map(x => x.value));
+  const cats = new Set([...document.querySelectorAll('.pfilter:checked')].map(x => x.value));
+  E = computeEdges();
+  let edges = [...E.map.values()].filter(e => types.has(comm[e.c].type) && cats.has(ppl[e.p].cat));
+  const cf = selectedCommittee();
+  if(cf === ''){
+    currentEdges = []; renderGraph([]);
+    setStatus('error', 'ועדה לא מוכרת — בחרו מהרשימה');
+    document.getElementById('emptyState').textContent = 'ועדה לא מוכרת — בחרו מהרשימה';
+    return;
+  }
+  if(cf){
+    const subs = document.getElementById('commSubs').checked;
+    const cc = new Set(comm.filter(c => c.num === cf || (subs && c.num.startsWith(cf))).map(c => c.i));
+    const direct = edges.filter(e => cc.has(e.c));
+    if(document.getElementById('commHop').checked){
+      const pp = new Set(direct.map(e => e.p));
+      edges = direct.concat(edges.filter(e => !cc.has(e.c) && pp.has(e.p) && e.w >= minW));
+    } else {
+      edges = direct;
+    }
+  }
+  if(q){
+    const mc = new Set(comm.filter(c => c.num.startsWith(q) || c.name.includes(q)).map(c => c.i));
+    const mp = new Set(ppl.filter(p => p.name.includes(q) || p.variants.includes(q)).map(p => p.i));
+    edges = edges.filter(e => mc.has(e.c) || mp.has(e.p));
+  } else if(!cf){
+    edges = edges.filter(e => e.w >= minW);
+  }
+  currentEdges = edges;
+  renderGraph(edges);
+  const nc = new Set(edges.map(e => e.c)).size, np = new Set(edges.map(e => e.p)).size;
+  const emptyEl = document.getElementById('emptyState');
+  const scope = [cf ? `ועדה ${cf}` : '', q ? `חיפוש "${q}"` : '', !cf && !q ? `קשרים של ${minW}+ ישיבות` : '', yearsLabel()]
+    .filter(Boolean).join(' · ');
+  if(!edges.length){
+    setStatus('error', `אין קשרים — ${scope}`);
+    emptyEl.textContent = 'אין קשרים בסינון הנוכחי';
+  } else {
+    setStatus('ok', `${scope} — ${nc} ועדות · ${np} אנשים · ${edges.length} קשרים`);
+    emptyEl.textContent = '';
+  }
+}
+
+function committeeLabel(c){ return `${c.num} ${c.name}`.trim(); }
+
+function renderGraph(edges){
+  const nodes = [], added = new Set(), maxC = E.maxC, maxP = E.maxP;
+  edges.forEach(e => {
+    const c = comm[e.c], p = ppl[e.p];
+    if(!added.has('C' + c.i)){
+      added.add('C' + c.i);
+      nodes.push({ id: 'C' + c.i, label: committeeLabel(c), shape: 'diamond', value: C_OFFSET + E.cN[c.i],
+        color: { background: TYPE_COLORS[c.type] || '#888', border: TYPE_COLORS[c.type] || '#888', highlight: { background: '#4ade80', border: '#4ade80' } },
+        title: `${committeeLabel(c)}\n${TYPE_NAMES[c.type] || ''}\n${E.cN[c.i]} ישיבות (${yearsLabel()})`,
+        font: { color: '#e2e8f0', face: 'IBM Plex Sans Hebrew' } });
+    }
+    if(!added.has('P' + p.i)){
+      added.add('P' + p.i);
+      nodes.push({ id: 'P' + p.i, label: p.name, shape: 'dot', value: Math.max(1, E.pN[p.i]),
+        color: { background: CAT_COLORS[p.cat], border: CAT_COLORS[p.cat], highlight: { background: '#4ade80', border: '#4ade80' } },
+        title: `${p.name}\n${CAT_NAMES[p.cat]}\n${E.pN[p.i]} ישיבות (${yearsLabel()})`,
+        font: { color: '#e2e8f0', face: 'IBM Plex Sans Hebrew' } });
+    }
+  });
+  const edgesOut = edges.map((e, i) => ({ id: i, from: 'C' + e.c, to: 'P' + e.p, value: e.w,
+    title: `${ppl[e.p].name} — ${committeeLabel(comm[e.c])}: ${e.w} ישיבות`,
+    color: { color: '#3a4150', highlight: '#4ade80', hover: '#6b7585' } }));
+
+  if(network){ network.destroy(); network = null; }
+  if(!nodes.length){ hideGraphLoading(); return; }
+  showGraphLoading();
+
+  nodesDS = new vis.DataSet(nodes);
+  const big = nodes.length > 800;
+  network = new vis.Network(document.getElementById('network'), { nodes: nodesDS, edges: new vis.DataSet(edgesOut) }, {
+    layout: { improvedLayout: !big },
+    physics: {
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -60, centralGravity: 0.008, springLength: 90, springConstant: 0.06, avoidOverlap: 0.2 },
+      stabilization: { iterations: big ? 80 : 400, updateInterval: 40 },
+    },
+    interaction: { hover: true, tooltipDelay: 120, hideEdgesOnDrag: big, hideEdgesOnZoom: big },
+    nodes: { borderWidth: 1, scaling: { min: 3, max: 40,
+      // committees: 30%-100% of the range by sqrt(sessions); people: 0%-55% by sqrt(sessions participated)
+      customScalingFunction: (min, max, total, v) => v >= C_OFFSET
+        ? 0.3 + 0.7 * Math.sqrt((v - C_OFFSET) / maxC)
+        : 0.55 * Math.sqrt(v / maxP),
+      label: { enabled: true, min: 9, max: 30, drawThreshold: 7, maxVisible: 30 } } },
+    edges: { smooth: false, scaling: { min: 0.5, max: 9 } },
+  });
+  network.on('stabilizationProgress', params => {
+    const pct = Math.round(params.iterations / params.total * 100);
+    document.getElementById('loadingBarFill').style.width = pct + '%';
+    document.getElementById('loadingPct').textContent = pct + '%';
+  });
+  network.once('stabilizationIterationsDone', () => {
+    // big graphs: show the rough layout right away and let it settle on screen before freezing
+    const net = network;
+    setTimeout(() => { if(net === network) net.setOptions({ physics: false }); }, big ? 12000 : 0);
+    hideGraphLoading();
+    if(selected && nodesDS.get(selected)) network.selectNodes([selected]);
+  });
+  network.on('click', params => {
+    if(params.nodes.length){ selected = params.nodes[0]; showDetail(selected); }
+    else if(!params.edges.length){ closeNodeDetail(); }
+  });
+}
+function showGraphLoading(){
+  document.getElementById('loadingBarFill').style.width = '2%';
+  document.getElementById('loadingPct').textContent = '0%';
+  document.getElementById('graphLoading').classList.remove('hidden');
+}
+function hideGraphLoading(){ document.getElementById('graphLoading').classList.add('hidden'); }
+
+// ---------- node detail ----------
+
+function closeNodeDetail(){ selected = null; document.getElementById('nodeDetail').classList.remove('show'); }
+
+async function loadDecisions(){
+  if(DECISIONS) return DECISIONS;
+  const res = await fetch('isi_decisions.json');
+  if(!res.ok) throw new Error(`isi_decisions.json HTTP ${res.status}`);
+  DECISIONS = await res.json();
+  return DECISIONS;
+}
+
+function roleNames(m){ return DATA.roles.filter(r => m & B[r]).map(r => ROLE_HE[r]).join(', '); }
+function sessionUrl(s){ return s.url ? (s.url.startsWith('http') ? s.url : DATA.url_prefix + s.url) : ''; }
+function pdfLink(s){ const u = sessionUrl(s); return u ? `<a href="${esc(u)}" target="_blank" rel="noopener">פרוטוקול</a>` : ''; }
+function stat(v, label){ return `<div class="ndStat"><b>${v}</b><span>${label}</span></div>`; }
+function more(n){ return n > DETAIL_ROWS ? `<div class="ndMore">מוצגות ${DETAIL_ROWS} מתוך ${n} שורות — הרשימה המלאה בקובץ ה-XLSX</div>` : ''; }
+
+// per-person stats inside one committee
+function committeePeople(c){
+  const md = mode(), by = new Map();
+  cSess(c).forEach(si => sess[si].rows.forEach(r => {
+    let x = by.get(r.p);
+    if(!x){ x = { p: r.p, part: 0, attended: 0, invited: 0, absent: 0, chair: 0, first: '', last: '', roles: new Set() }; by.set(r.p, x); }
+    const s = sess[si];
+    if(participates(r.m, s, md)){ x.part++; x.first = x.first || s.date; x.last = s.date; }
+    if(r.m & B.attended) x.attended++;
+    if(r.m & INV_MASK) x.invited++;
+    if(r.m & B.absent) x.absent++;
+    if(r.m & B.chair) x.chair++;
+    DATA.roles.forEach(rl => { if(r.m & B[rl]) x.roles.add(ROLE_HE[rl]); });
+  }));
+  return [...by.values()].sort((a, b) => b.part - a.part || b.invited - a.invited);
+}
+
+// per-committee stats for one person
+function personCommittees(p){
+  const md = mode(), by = new Map();
+  pRows(p).forEach(r => {
+    const s = sess[r.s];
+    let x = by.get(s.c);
+    if(!x){ x = { c: s.c, part: 0, attended: 0, invited: 0, absent: 0, chair: 0, first: '', last: '' }; by.set(s.c, x); }
+    if(participates(r.m, s, md)) x.part++;
+    if(r.m & B.attended) x.attended++;
+    if(r.m & INV_MASK) x.invited++;
+    if(r.m & B.absent) x.absent++;
+    if(r.m & B.chair) x.chair++;
+    if(!x.first || s.date < x.first) x.first = s.date;
+    if(s.date > x.last) x.last = s.date;
+  });
+  return [...by.values()].sort((a, b) => b.part - a.part || b.invited - a.invited);
+}
+
+function showDetail(nodeId){
+  const html = nodeId[0] === 'C' ? committeeHtml(comm[+nodeId.slice(1)]) : personHtml(ppl[+nodeId.slice(1)]);
+  document.getElementById('nodeDetailBody').innerHTML = html;
+  document.getElementById('nodeDetail').classList.add('show');
+  document.getElementById('nodeDetail').scrollTop = 0;
+}
+
+function committeeHtml(c){
+  const people = committeePeople(c);
+  const parent = comm.find(x => x.num === c.parent);
+  const children = comm.filter(x => x.parent === c.num);
+  const cs = cSess(c), sessRows = [...cs].reverse();
+  return `<div class="ndTitle">${esc(c.name || c.num)}</div>
+    <div class="ndSub">ועדה ${esc(c.num)} · ${TYPE_NAMES[c.type] || ''} · ${fmtDate(c.first)}–${fmtDate(c.last)}</div>
+    <div class="ndSub">נתוני ${yearsLabel()}</div>
+    <div class="ndStats">${stat(cs.length, 'ישיבות')}${stat(people.filter(x => x.part).length, 'משתתפים')}${stat(cs.reduce((a, si) => a + sess[si].nDec, 0), 'החלטות')}</div>
+    <div class="ndBtns"><button class="xlsx-btn" onclick="downloadNodeXlsx('C${c.i}')">⬇ כל נתוני הוועדה (XLSX)</button>
+      <button class="xlsx-btn focus-btn" onclick="focusNode('C${c.i}')">◎ הצג רק קשרי הוועדה</button></div>
+    ${parent || children.length ? `<div class="ndH">ועדות קשורות</div><table class="ndTable">${
+      (parent ? [parent] : []).concat(children).map(x => `<tr><td class="num">${esc(x.num)}</td><td class="lnk" onclick="selectNode('C${x.i}')">${esc(x.name)}</td><td>${x === parent ? 'ועדת אם' : 'ועדת משנה'}</td></tr>`).join('')}</table>` : ''}
+    <div class="ndH">משתתפים</div>
+    <table class="ndTable"><tr><th>שם</th><th>השתתפות</th><th>נוכח</th><th>הוזמן</th><th>נעדר</th></tr>
+    ${people.slice(0, DETAIL_ROWS).map(x => `<tr><td class="lnk" onclick="selectNode('P${x.p}')">${esc(ppl[x.p].name)}${x.chair ? ' (יו״ר)' : ''}</td>
+      <td class="num">${x.part}</td><td class="num">${x.attended || ''}</td><td class="num">${x.invited || ''}</td><td class="num">${x.absent || ''}</td></tr>`).join('')}</table>${more(people.length)}
+    <div class="ndH">ישיבות</div>
+    <table class="ndTable"><tr><th>תאריך</th><th>ישיבה</th><th>החלטות</th><th></th></tr>
+    ${sessRows.slice(0, DETAIL_ROWS).map(si => { const s = sess[si];
+      return `<tr><td class="num">${fmtDate(s.date)}</td><td>${esc(s.id)}</td><td class="num">${s.nDec || ''}</td><td>${pdfLink(s)}</td></tr>`; }).join('')}</table>${more(sessRows.length)}`;
+}
+
+function personHtml(p){
+  const cs = personCommittees(p);
+  const rows = pRows(p).sort((a, b) => sess[b.s].date.localeCompare(sess[a.s].date));
+  const dates = rows.map(r => sess[r.s].date);
+  return `<div class="ndTitle">${esc(p.name)}</div>
+    <div class="ndSub">${CAT_NAMES[p.cat]}${dates.length ? ` · ${fmtDate(dates[dates.length - 1])}–${fmtDate(dates[0])}` : ''}</div>
+    ${p.variants ? `<div class="ndSub">כתיבים נוספים: ${esc(p.variants)}</div>` : ''}
+    <div class="ndSub">נתוני ${yearsLabel()}</div>
+    <div class="ndStats">${stat(E.pN[p.i], 'ישיבות')}${stat(cs.filter(x => x.part).length, 'ועדות')}${stat(rows.filter(r => r.m & B.chair).length, 'כיו״ר')}</div>
+    <div class="ndBtns"><button class="xlsx-btn" onclick="downloadNodeXlsx('P${p.i}')">⬇ כל נתוני האדם (XLSX)</button>
+      <button class="xlsx-btn focus-btn" onclick="focusNode('P${p.i}')">◎ הצג רק קשרי האדם</button></div>
+    <div class="ndH">ועדות</div>
+    <table class="ndTable"><tr><th>ועדה</th><th>השתתפות</th><th>נוכח</th><th>הוזמן</th><th>נעדר</th></tr>
+    ${cs.slice(0, DETAIL_ROWS).map(x => { const c = comm[x.c];
+      return `<tr><td class="lnk" onclick="selectNode('C${c.i}')">${esc(committeeLabel(c))}${x.chair ? ' (יו״ר)' : ''}</td>
+      <td class="num">${x.part}</td><td class="num">${x.attended || ''}</td><td class="num">${x.invited || ''}</td><td class="num">${x.absent || ''}</td></tr>`; }).join('')}</table>${more(cs.length)}
+    <div class="ndH">ישיבות</div>
+    <table class="ndTable"><tr><th>תאריך</th><th>ועדה</th><th>תפקיד</th><th></th></tr>
+    ${rows.slice(0, DETAIL_ROWS).map(r => { const s = sess[r.s];
+      return `<tr><td class="num">${fmtDate(s.date)}</td><td>${esc(s.id)}</td><td>${roleNames(r.m)}</td><td>${pdfLink(s)}</td></tr>`; }).join('')}</table>${more(rows.length)}`;
+}
+
+// select a node from a detail-panel link: show it in the graph if it's there, else search for it
+function selectNode(nodeId){
+  selected = nodeId;
+  showDetail(nodeId);
+  if(network && nodesDS.get(nodeId)){
+    network.selectNodes([nodeId]);
+    network.focus(nodeId, { scale: 1.2, animation: { duration: 400 } });
+  }
+}
+function focusNode(nodeId){
+  selected = nodeId;
+  if(nodeId[0] === 'C'){
+    document.getElementById('commBox').value = committeeLabel(comm[+nodeId.slice(1)]);
+    document.getElementById('searchBox').value = '';
+  } else {
+    document.getElementById('searchBox').value = ppl[+nodeId.slice(1)].name;
+  }
+  applyFilter();
+}
+
+// ---------- XLSX ----------
+
+function sheet(wb, rows, name){
+  const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ '': 'אין נתונים' }]);
+  ws['!views'] = [{ RTL: true }];
+  XLSX.utils.book_append_sheet(wb, ws, name);
+}
+function safeName(s){ return String(s).replace(/[^֐-׿a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 60); }
+const MODE_HE = { all: 'נוכחות, ובישיבות ללא רישום נוכחות — הזמנה', att: 'נוכחות מתועדת בלבד' };
+
+async function downloadNodeXlsx(nodeId){
+  let dec;
+  try{ dec = await loadDecisions(); } catch(e){ setStatus('error', `שגיאה בטעינת ההחלטות: ${e.message}`); return; }
+  const wb = XLSX.utils.book_new();
+  if(nodeId[0] === 'C'){
+    const c = comm[+nodeId.slice(1)];
+    const parent = comm.find(x => x.num === c.parent);
+    sheet(wb, [{ 'מספר ועדה': c.num, 'שם': c.name, 'סוג': TYPE_NAMES[c.type] || '', 'ועדת אם': parent ? committeeLabel(parent) : '',
+      'ישיבות': cSess(c).length, 'שנים': yearsLabel(), 'ישיבה ראשונה (כללי)': c.first, 'ישיבה אחרונה (כללי)': c.last, 'הגדרת השתתפות': MODE_HE[mode()],
+      'מקור': 'מכון התקנים — פרוטוקולי ועדות', 'הופק': DATA.generated }], 'ועדה');
+    sheet(wb, committeePeople(c).map(x => ({ 'שם': ppl[x.p].name, 'סיווג': CAT_NAMES[ppl[x.p].cat], 'ישיבות (השתתפות)': x.part,
+      'נכח': x.attended, 'הוזמן': x.invited, 'נעדר': x.absent, 'יו״ר': x.chair, 'תפקידים': [...x.roles].join(', '),
+      'השתתפות ראשונה': x.first, 'השתתפות אחרונה': x.last })), 'משתתפים');
+    sheet(wb, cSess(c).map(si => { const s = sess[si];
+      const byRole = r => s.rows.filter(x => x.m & B[r]).map(x => ppl[x.p].name).join(', ');
+      return { 'מזהה ישיבה': s.id, 'מספר ישיבה': s.no, 'תאריך': s.date, 'רישום נוכחות': s.hasAtt ? 'כן' : 'לא',
+        'יו״ר': byRole('chair'), 'נכחו': byRole('attended'), 'נעדרו': byRole('absent'), 'אורחים': byRole('guest'),
+        'חברים מוזמנים': byRole('member_invited'), 'מוזמנים חיצוניים': byRole('invitee'), 'מרכז/ת': byRole('coordinator'),
+        'החלטות': s.nDec, 'קישור': sessionUrl(s) }; }), 'ישיבות');
+    sheet(wb, cSess(c).flatMap(si => (dec[si] || []).map(d => ({ 'מזהה ישיבה': sess[si].id, 'תאריך': sess[si].date,
+      'מספר החלטה': d[0], 'תקציר': d[1], 'מספר נושא': d[2], 'שם נושא': d[3], 'שלב': d[4], 'תקן': d[5] }))), 'החלטות');
+    XLSX.writeFile(wb, `isi_committee_${safeName(c.num)}_${yearsLabel()}.xlsx`);
+  } else {
+    const p = ppl[+nodeId.slice(1)];
+    sheet(wb, [{ 'שם': p.name, 'כתיבים נוספים': p.variants, 'סיווג': CAT_NAMES[p.cat], 'ישיבות (השתתפות)': E.pN[p.i],
+      'שנים': yearsLabel(), 'הגדרת השתתפות': MODE_HE[mode()], 'מקור': 'מכון התקנים — פרוטוקולי ועדות', 'הופק': DATA.generated }], 'אדם');
+    sheet(wb, personCommittees(p).map(x => { const c = comm[x.c];
+      return { 'מספר ועדה': c.num, 'שם ועדה': c.name, 'סוג': TYPE_NAMES[c.type] || '', 'ישיבות (השתתפות)': x.part,
+        'נכח': x.attended, 'הוזמן': x.invited, 'נעדר': x.absent, 'יו״ר': x.chair, 'ראשונה': x.first, 'אחרונה': x.last }; }), 'ועדות');
+    const rows = pRows(p).sort((a, b) => sess[a.s].date.localeCompare(sess[b.s].date));
+    sheet(wb, rows.map(r => { const s = sess[r.s], c = comm[s.c];
+      return { 'תאריך': s.date, 'מזהה ישיבה': s.id, 'מספר ועדה': c.num, 'שם ועדה': c.name, 'תפקיד': roleNames(r.m),
+        'נספר כהשתתפות': participates(r.m, s, mode()) ? 'כן' : 'לא', 'החלטות בישיבה': s.nDec, 'קישור': sessionUrl(s) }; }), 'ישיבות');
+    sheet(wb, rows.filter(r => participates(r.m, sess[r.s], mode())).flatMap(r => (dec[r.s] || []).map(d => ({
+      'מזהה ישיבה': sess[r.s].id, 'תאריך': sess[r.s].date, 'מספר החלטה': d[0], 'תקציר': d[1], 'מספר נושא': d[2],
+      'שם נושא': d[3], 'שלב': d[4], 'תקן': d[5] }))), 'החלטות בישיבות');
+    XLSX.writeFile(wb, `isi_person_${safeName(p.name)}_${yearsLabel()}.xlsx`);
+  }
+}
+
+function downloadViewXlsx(){
+  if(!currentEdges.length) return;
+  const wb = XLSX.utils.book_new();
+  sheet(wb, currentEdges.map(e => { const c = comm[e.c], p = ppl[e.p];
+    return { 'שם': p.name, 'סיווג': CAT_NAMES[p.cat], 'מספר ועדה': c.num, 'שם ועדה': c.name, 'סוג ועדה': TYPE_NAMES[c.type] || '',
+      'ישיבות משותפות': e.w, 'ראשונה': sess[e.sessions[0]].date, 'אחרונה': sess[e.sessions[e.sessions.length - 1]].date }; })
+    .sort((a, b) => b['ישיבות משותפות'] - a['ישיבות משותפות']), 'קשרים');
+  const q = document.getElementById('searchBox').value.trim(), cf = selectedCommittee();
+  XLSX.writeFile(wb, `isi_network${cf ? '_' + cf : ''}${q ? '_' + safeName(q) : ''}${!cf && !q ? '_min' + document.getElementById('minW').value : ''}_${yearsLabel()}.xlsx`);
+}
+
+init();
+</script>
+</body>
+</html>

@@ -305,16 +305,17 @@ The pattern used for futures/USDA/BLS, in order:
 - `gas/` — "Natural Gas // Imports & Price Explorer" (`gas_export.py` builds `gas_data.json`).
 - `worldenergy/` — "WorldEnergy // OWID Energy Explorer" (see below).
 - `lobbyists/` — "Lobbyists // Network Explorer" (Israeli lobbyist registry visualization).
+- `isi/` — "ISI Committees // Network Explorer" (Standards Institute committees ↔ participants; see below).
 
 `change/` and `lobbyists/` weren't touched by the data-source work described above.
 
-**Cross-page nav:** every page (root + all four subpages) carries the same small
+**Cross-page nav:** every page (root + all five subpages) carries the same small
 `☰ ניווט` dropdown in the top corner of its `<header>` — a self-contained
 `<nav class="sitenav" id="sitenav">` block (scoped `.sitenav*` CSS + a tiny IIFE
-that closes it on outside-click / Escape), links to all five pages, current page
+that closes it on outside-click / Escape), links to all six pages, current page
 marked `class="current"`. It replaced the earlier ad-hoc row of `.navlink` /
 `.back` anchors. To add a page: drop the same block + CSS into its header and add
-one `<a>` line to the menu in all five files. On `lobbyists/` the dropdown is
+one `<a>` line to the menu in all six files. On `lobbyists/` and `isi/` the dropdown is
 hidden below 760px (the page keeps its own `☰` sidebar toggle there).
 
 ### worldenergy/ — Our World in Data energy dataset
@@ -362,3 +363,33 @@ data is entity×year panel data (220 countries + 16 aggregates × 66 metrics ×
 
 Refresh: `python worldenergy/owid_energy_export.py`, then commit the regenerated
 `energy_data.json`.
+
+### isi/ — Standards Institute committee network
+
+Network of מכון התקנים committees and the people who take part in their sessions, built from the
+committee protocols/invitations the institute publishes. Same shell as `lobbyists/` (vis-network +
+SheetJS), no password gate.
+
+| | |
+|---|---|
+| Source DB | `../trade/isi/data/isi.db` (pipeline in `trade/isi/README.md`) |
+| Export script | `../trade/isi/export_site_data.py` (run after `build_db.py`; writes straight into `isi/`) |
+| Output | `isi/isi_data.json` (~1.4 MB, loaded on open), `isi/isi_decisions.json` (~3 MB, loaded on first XLSX) |
+| Refresh | manual — not part of `refresh_all.py` / the monthly task |
+
+- Nodes: committees (diamonds, coloured by type) and people (dots: member / external invitee only /
+  SII staff — staff hidden by default since they link nearly every committee). Edge = person took part
+  in that committee's sessions; weight = number of sessions. Committee size = sessions held, person
+  size = sessions taken part in (scaled separately so committees stay visible).
+- "Took part" has two modes: default = attended/guest/chair/coordinator/recorder, or invited where the
+  session has no attendance record (almost everything before 2023); the other mode = recorded
+  attendance only.
+- Default view hides edges under 5 sessions (~1,900 nodes); search ignores the threshold.
+- Filters: year range (applies to edges, node sizes, detail panel and XLSX); committee picker (number or
+  name from the list, or a number prefix like `540`; optional sub-committees and a second hop to the
+  participants' other committees, thresholded); committee/person types; participation mode.
+- Clicking a node opens a panel (stats, related committees, participants/committees, sessions with
+  protocol links) with a per-node XLSX (info, participants or committees, sessions, decisions).
+- Big graphs run only 80 stabilization iterations off-screen, then settle visibly for 12 s before
+  physics is frozen — full stabilization took ~27 s.
+
