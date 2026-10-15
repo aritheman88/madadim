@@ -302,7 +302,7 @@ The pattern used for futures/USDA/BLS, in order:
 ## Other pages in this repo
 
 - `change/` — "CBS // Price Change Calculator", linked from the main page.
-- `gas/` — "Natural Gas // Imports & Price Explorer" (`gas_export.py` builds `gas_data.json`).
+- `gas/` — "Natural Gas // Imports & Price Explorer" (`gas_export.py` builds `gas_data.json`). Disclaimer overlay only, no password gate.
 - `worldenergy/` — "WorldEnergy // OWID Energy Explorer" (see below).
 - `lobbyists/` — "Lobbyists // Network Explorer" (Israeli lobbyist registry visualization).
 - `isi/` — "ISI Committees // Network Explorer" (Standards Institute committees ↔ participants; see below).
